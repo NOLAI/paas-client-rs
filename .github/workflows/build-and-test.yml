@@ -1,0 +1,25 @@
+name: Build and Test
+
+on:
+  push:
+    branches:
+      - 'main'
+  pull_request:
+
+jobs:
+  semver-checks:
+    runs-on: ubuntu-latest
+
+    name: cargo semver-checks
+    steps:
+      - uses: actions/checkout@v4
+      - uses: obi1kenobi/cargo-semver-checks-action@v2
+
+  test:
+    runs-on: ubuntu-latest
+    name: cargo test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - run: cargo test --all-features
+
