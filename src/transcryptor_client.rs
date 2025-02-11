@@ -3,7 +3,7 @@ use libpep::distributed::key_blinding::SessionKeyShare;
 use libpep::high_level::contexts::{EncryptionContext, PseudonymizationDomain};
 use libpep::high_level::data_types::EncryptedPseudonym;
 use paas_api::sessions::StartSessionResponse;
-use paas_api::status::{StatusResponse, SystemId};
+use paas_api::status::{StatusResponse, SystemId, VersionInfo};
 use paas_api::transcrypt::{
     PseudonymizationBatchRequest, PseudonymizationBatchResponse, PseudonymizationRequest,
     PseudonymizationResponse,
@@ -27,6 +27,7 @@ pub struct TranscryptorStatus {
     pub state: TranscryptorState,
     pub last_checked: Option<DateTime<Utc>>,
 }
+
 pub type AuthToken = String;
 
 /// A client that communicates with a single Transcryptor.
@@ -72,16 +73,37 @@ impl TranscryptorClient {
             self.session_id.clone(),
         )
     }
+    fn make_url(&self, path: &str) -> String {
+        format!(
+            "{}{}{}",
+            self.config.url.trim_end_matches('/'),
+            paas_api::paths::API_BASE,
+            path
+        )
+    }
 
+    fn make_scope_url(&self, scope: &str, path: &str) -> String {
+        format!(
+            "{}{}{}{}",
+            self.config.url.trim_end_matches('/'),
+            paas_api::paths::API_BASE,
+            scope,
+            path
+        )
+    }
     /// Check the status of the transcryptor.
     pub async fn check_status(&mut self) -> Result<(), reqwest::Error> {
         let response = reqwest::Client::new()
-            .get(format!("{}/status", self.config.url))
+            .get(self.make_url(paas_api::paths::STATUS))
             .header("Authorization", format!("Bearer {}", self.auth_token))
             .send()
             .await?;
         // TODO handle errors and update status accordingly
-        let _session = response.json::<StatusResponse>().await?;
+        let status = response.json::<StatusResponse>().await?;
+
+        let client_version = VersionInfo::default();
+        assert!(status.version_info.is_compatible_with(&client_version)); // TODO throw error
+
         self.status = TranscryptorStatus {
             state: TranscryptorState::Online,
             last_checked: Some(chrono::offset::Local::now().into()), // TODO use the time from the response
@@ -94,7 +116,10 @@ impl TranscryptorClient {
         &mut self,
     ) -> Result<(EncryptionContext, SessionKeyShare), reqwest::Error> {
         let response = reqwest::Client::new()
-            .post(format!("{}/sessions/start", self.config.url))
+            .post(self.make_scope_url(
+                paas_api::paths::sessions::SCOPE,
+                paas_api::paths::sessions::START,
+            ))
             .header("Authorization", format!("Bearer {}", self.auth_token))
             .send()
             .await?;
@@ -122,7 +147,7 @@ impl TranscryptorClient {
             session_to: session_to.clone(),
         };
         let response = reqwest::Client::new()
-            .post(format!("{}/pseudonymize", self.config.url))
+            .post(self.make_url(paas_api::paths::transcrypt::PSEUDONYMIZE))
             .header("Authorization", format!("Bearer {}", self.auth_token))
             .json(&request)
             .send()
@@ -148,7 +173,7 @@ impl TranscryptorClient {
             session_to: session_to.clone(),
         };
         let response = reqwest::Client::new()
-            .post(format!("{}/pseudonymize_batch", self.config.url))
+            .get(self.make_url(paas_api::paths::transcrypt::PSEUDONYMIZE_BATCH))
             .header("Authorization", format!("Bearer {}", self.auth_token))
             .json(&request)
             .send()

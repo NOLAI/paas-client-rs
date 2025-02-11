@@ -132,7 +132,7 @@ impl PseudonymService {
     /// If you need to preserve the order, you should call the [pseudonymize] method for each pseudonym individually. (TODO: add a feature flag to preserve order)
     pub async fn pseudonymize_batch(
         &mut self,
-        encrypted_pseudonyms: &Vec<EncryptedPseudonym>,
+        encrypted_pseudonyms: &[EncryptedPseudonym],
         sessions_from: &EncryptionContexts,
         domain_from: &PseudonymizationDomain,
         domain_to: &PseudonymizationDomain,
@@ -140,7 +140,7 @@ impl PseudonymService {
         if self.pep_crypto_client.is_none() {
             self.init().await;
         }
-        let mut transcrypted = encrypted_pseudonyms.clone();
+        let mut transcrypted = encrypted_pseudonyms.to_owned();
         for transcryptor in &self.transcryptors {
             transcrypted = transcryptor
                 .pseudonymize_batch(
