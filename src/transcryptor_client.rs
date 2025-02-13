@@ -1,3 +1,4 @@
+use crate::auth::{Auth, AuthError, RequestBuilderExt};
 use chrono::{DateTime, Utc};
 use libpep::distributed::key_blinding::SessionKeyShare;
 use libpep::high_level::contexts::{EncryptionContext, PseudonymizationDomain};
@@ -28,22 +29,30 @@ pub struct TranscryptorStatus {
     pub last_checked: Option<DateTime<Utc>>,
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum TranscryptorError {
+    #[error(transparent)]
+    Auth(#[from] AuthError),
+    #[error(transparent)]
+    Request(#[from] reqwest::Error),
+}
+
 pub type AuthToken = String;
 
 /// A client that communicates with a single Transcryptor.
 #[derive(Clone)]
-pub struct TranscryptorClient {
+pub struct TranscryptorClient<'a> {
     pub(crate) config: TranscryptorConfig,
-    auth_token: AuthToken,
+    auth: &'a (dyn Auth + Send + Sync), // Now references trait object
     status: TranscryptorStatus,
     pub session_id: Option<EncryptionContext>,
 }
-impl TranscryptorClient {
+impl<'a> TranscryptorClient<'a> {
     /// Create a new TranscryptorClient with the given configuration.
-    pub fn new(config: TranscryptorConfig, auth_token: AuthToken) -> Self {
+    pub fn new(config: TranscryptorConfig, auth: &'a (dyn Auth + Send + Sync)) -> Self {
         Self {
             config,
-            auth_token,
+            auth,
             status: TranscryptorStatus {
                 state: TranscryptorState::Unknown,
                 last_checked: None,
@@ -53,12 +62,12 @@ impl TranscryptorClient {
     }
     pub fn restore(
         config: TranscryptorConfig,
-        auth_token: AuthToken,
+        auth: &'a (dyn Auth + Send + Sync),
         session_id: EncryptionContext,
     ) -> Self {
         Self {
             config,
-            auth_token,
+            auth,
             status: TranscryptorStatus {
                 state: TranscryptorState::Unknown,
                 last_checked: None,
@@ -66,12 +75,8 @@ impl TranscryptorClient {
             session_id: Some(session_id),
         }
     }
-    pub fn dump(&self) -> (TranscryptorConfig, AuthToken, Option<EncryptionContext>) {
-        (
-            self.config.clone(),
-            self.auth_token.clone(),
-            self.session_id.clone(),
-        )
+    pub fn dump(&self) -> (TranscryptorConfig, Option<EncryptionContext>) {
+        (self.config.clone(), self.session_id.clone())
     }
     fn make_url(&self, path: &str) -> String {
         format!(
@@ -92,10 +97,11 @@ impl TranscryptorClient {
         )
     }
     /// Check the status of the transcryptor.
-    pub async fn check_status(&mut self) -> Result<(), reqwest::Error> {
+    pub async fn check_status(&mut self) -> Result<(), TranscryptorError> {
         let response = reqwest::Client::new()
             .get(self.make_url(paas_api::paths::STATUS))
-            .header("Authorization", format!("Bearer {}", self.auth_token))
+            .with_auth(self.auth)
+            .await?
             .send()
             .await?;
         // TODO handle errors and update status accordingly
@@ -114,13 +120,14 @@ impl TranscryptorClient {
     /// Start a new session with the transcryptor.
     pub async fn start_session(
         &mut self,
-    ) -> Result<(EncryptionContext, SessionKeyShare), reqwest::Error> {
+    ) -> Result<(EncryptionContext, SessionKeyShare), TranscryptorError> {
         let response = reqwest::Client::new()
             .post(self.make_scope_url(
                 paas_api::paths::sessions::SCOPE,
                 paas_api::paths::sessions::START,
             ))
-            .header("Authorization", format!("Bearer {}", self.auth_token))
+            .with_auth(self.auth)
+            .await?
             .send()
             .await?;
         let session = response.json::<StartSessionResponse>().await?;
@@ -138,7 +145,7 @@ impl TranscryptorClient {
         domain_to: &PseudonymizationDomain,
         session_from: &EncryptionContext,
         session_to: &EncryptionContext,
-    ) -> Result<EncryptedPseudonym, reqwest::Error> {
+    ) -> Result<EncryptedPseudonym, TranscryptorError> {
         let request = PseudonymizationRequest {
             encrypted_pseudonym: *encrypted_pseudonym,
             domain_from: domain_from.clone(),
@@ -148,7 +155,8 @@ impl TranscryptorClient {
         };
         let response = reqwest::Client::new()
             .post(self.make_url(paas_api::paths::transcrypt::PSEUDONYMIZE))
-            .header("Authorization", format!("Bearer {}", self.auth_token))
+            .with_auth(self.auth)
+            .await?
             .json(&request)
             .send()
             .await?;
@@ -164,7 +172,7 @@ impl TranscryptorClient {
         domain_to: &PseudonymizationDomain,
         session_from: &EncryptionContext,
         session_to: &EncryptionContext,
-    ) -> Result<Vec<EncryptedPseudonym>, reqwest::Error> {
+    ) -> Result<Vec<EncryptedPseudonym>, TranscryptorError> {
         let request = PseudonymizationBatchRequest {
             encrypted_pseudonyms: encrypted_pseudonyms.to_vec(),
             domain_from: domain_from.clone(),
@@ -174,7 +182,8 @@ impl TranscryptorClient {
         };
         let response = reqwest::Client::new()
             .get(self.make_url(paas_api::paths::transcrypt::PSEUDONYMIZE_BATCH))
-            .header("Authorization", format!("Bearer {}", self.auth_token))
+            .with_auth(self.auth)
+            .await?
             .json(&request)
             .send()
             .await?;

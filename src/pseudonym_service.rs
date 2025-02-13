@@ -1,4 +1,4 @@
-use crate::auth::AuthTokens;
+use crate::auth::SystemAuths;
 use crate::sessions::EncryptionContexts;
 use crate::transcryptor_client::{TranscryptorClient, TranscryptorConfig};
 use libpep::distributed::key_blinding::BlindedGlobalSecretKey;
@@ -17,26 +17,24 @@ pub struct PseudonymServiceConfig {
 } // TODO servers should host these configs in a well-known location
 
 #[derive(Clone)]
-pub struct PseudonymService {
+pub struct PseudonymService<'a> {
+    // Now only needs lifetime param, no generic A
     config: PseudonymServiceConfig,
-    transcryptors: Vec<TranscryptorClient>,
+    transcryptors: Vec<TranscryptorClient<'a>>,
     pub pep_crypto_client: Option<PEPClient>, // TODO make this private
 }
 
 /// Convert encrypted pseudonyms into your own pseudonyms, using the [PseudonymService].
 /// The service will communicate with the configured transcryptors, and wraps around a [PEPClient] for cryptographic operations.
-impl PseudonymService {
-    pub fn new(config: PseudonymServiceConfig, auth_tokens: AuthTokens) -> Self {
+impl<'a> PseudonymService<'a> {
+    pub fn new(config: PseudonymServiceConfig, auths: &'a SystemAuths) -> Self {
         let transcryptors = config
             .transcryptors
             .iter()
             .map(|c| {
                 TranscryptorClient::new(
                     c.clone(),
-                    auth_tokens
-                        .get(&c.system_id)
-                        .expect("No auth token found for system")
-                        .to_string(),
+                    auths.get(&c.system_id).expect("No auth found for system"),
                 )
             })
             .collect();
@@ -50,7 +48,7 @@ impl PseudonymService {
     /// Restore a [PseudonymService] from a dumped state.
     pub fn restore(
         config: PseudonymServiceConfig,
-        auth_tokens: AuthTokens,
+        auths: &'a SystemAuths,
         session_ids: EncryptionContexts,
         session_keys: (SessionPublicKey, SessionSecretKey),
     ) -> Self {
@@ -60,10 +58,7 @@ impl PseudonymService {
             .map(|c| {
                 TranscryptorClient::restore(
                     c.clone(),
-                    auth_tokens
-                        .get(&c.system_id)
-                        .expect("No auth token found for system")
-                        .to_string(),
+                    auths.get(&c.system_id).expect("No auth found for system"),
                     session_ids
                         .get(&c.system_id)
                         .expect("No session id found for system")
