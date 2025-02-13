@@ -54,7 +54,6 @@ let auths = SystemAuths::from_auths(HashMap::from([
     ("test_system_2".to_string(), BearerTokenAuth::new("test_token_2".to_string())),
 ]));
 
-let mut service = PseudonymService::new(config, auths);
 
 let encrypted_pseudonym = EncryptedPseudonym::from_base64("nr3FRadpFFGCFksYgrloo5J2V9j7JJWcUeiNBna66y78lwMia2-l8He4FfJPoAjuHCpH-8B0EThBr8DS3glHJw==").unwrap();
 let sessions = EncryptionContexts(HashMap::from([
@@ -65,7 +64,7 @@ let sessions = EncryptionContexts(HashMap::from([
 let domain_from = PseudonymizationDomain::from("domain1");
 let domain_to = PseudonymizationDomain::from("domain2");
 
-let mut service = PseudonymService::new(config, auth_tokens);
-let result = service.pseudonymize(&encrypted_pseudonym, &sessions, &domain_from, &domain_to).await;
-let pseudonym = service.decrypt(result).await;
+let mut service = PseudonymService::new(config, &auths).expect("Failed to create service");
+let result = service.pseudonymize(&encrypted_pseudonym, &sessions, &domain_from, &domain_to).await.expect("Failed to pseudonymize");
+let pseudonym = service.decrypt(result).await.expect("Failed to decrypt");
 ```

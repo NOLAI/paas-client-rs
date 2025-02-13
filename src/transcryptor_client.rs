@@ -32,9 +32,9 @@ pub struct TranscryptorStatus {
 #[derive(Debug, thiserror::Error)]
 pub enum TranscryptorError {
     #[error(transparent)]
-    Auth(#[from] AuthError),
+    AuthError(#[from] AuthError),
     #[error(transparent)]
-    Request(#[from] reqwest::Error),
+    NetworkError(#[from] reqwest::Error),
 }
 
 pub type AuthToken = String;

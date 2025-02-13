@@ -47,8 +47,8 @@ async fn test_create_pep_client() {
             BearerTokenAuth::new("test_token_2".to_string()),
         ),
     ]));
-    let mut service = PseudonymService::new(config, &auths);
-    service.init().await;
+    let mut service = PseudonymService::new(config, &auths).expect("Failed to create service");
+    service.init().await.expect("Failed to init service");
     assert!(service.pep_crypto_client.is_some());
 }
 
@@ -118,10 +118,11 @@ async fn test_pseudonymize() {
     let domain_from = PseudonymizationDomain::from("domain1");
     let domain_to = PseudonymizationDomain::from("domain2");
 
-    let mut service = PseudonymService::new(config, &auths);
+    let mut service = PseudonymService::new(config, &auths).expect("Failed to create service");
     let result = service
         .pseudonymize(&encrypted_pseudonym, &sessions, &domain_from, &domain_to)
-        .await;
+        .await
+        .expect("Failed to pseudonymize");
     // We dont test the actual result, just check with the content of the mock response
     assert_eq!(result, EncryptedPseudonym::from_base64("gqmiHiFA8dMdNtbCgsJ-EEfT9fjTV91BrfcHKN57e2vaLR2_UJEVExd6o9tdZg7vKGQklYZwV3REOaOQedKtUA==").unwrap());
 }

@@ -69,15 +69,21 @@ async fn main() {
     // Restore the service from the state dump if it exists
     let state_path = matches.get_one::<String>("state_path");
     let mut service = if let Some(path) = state_path {
-        if let Ok(contents) = fs::read_to_string(path) {
-            let dump: PseudonymServiceDump =
-                serde_json::from_str(&contents).expect("Failed to deserialize service state");
-            PseudonymService::restore(config, &auths, dump.sessions, dump.session_keys)
-        } else {
-            PseudonymService::new(config, &auths)
+        match fs::read_to_string(path) {
+            Ok(contents) => {
+                let dump: PseudonymServiceDump = serde_json::from_str(&contents)
+                    .expect("Failed to deserialize service state from file");
+
+                PseudonymService::restore(config, &auths, dump.sessions, dump.session_keys)
+                    .expect("Failed to restore service from state")
+            }
+            Err(e) => {
+                eprintln!("Failed to read state file: {}, creating new service", e);
+                PseudonymService::new(config, &auths).expect("Failed to create new service")
+            }
         }
     } else {
-        PseudonymService::new(config, &auths)
+        PseudonymService::new(config, &auths).expect("Failed to create new service")
     };
 
     // Execute the subcommand
@@ -95,7 +101,7 @@ async fn main() {
 
     // Write the state dump to the file
     if let Some(path) = state_path {
-        let (sessions, session_keys) = service.dump();
+        let (sessions, session_keys) = service.dump().expect("Failed to dump state");
         let dump = PseudonymServiceDump {
             sessions,
             session_keys,

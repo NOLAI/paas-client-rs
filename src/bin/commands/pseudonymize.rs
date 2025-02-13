@@ -75,13 +75,14 @@ pub async fn execute(matches: &clap::ArgMatches, service: &mut PseudonymService<
 
     let result = service
         .pseudonymize(&encrypted_pseudonym, &sessions, &domain_from, &domain_to)
-        .await;
+        .await
+        .expect("Failed to pseudonymize");
 
     if matches.get_flag("no_decrypt") {
         eprint!("Transcryption returned: ");
         println!("{}", &result.as_base64());
     } else {
-        let pseudonym = service.decrypt(&result).await;
+        let pseudonym = service.decrypt(&result).await.expect("Failed to decrypt");
         eprint!("Decrypted pseudonym: ");
         println!("{}", &pseudonym.encode_as_hex());
     }
