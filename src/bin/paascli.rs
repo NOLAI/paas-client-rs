@@ -74,16 +74,16 @@ async fn main() {
                 let dump: PseudonymServiceDump = serde_json::from_str(&contents)
                     .expect("Failed to deserialize service state from file");
 
-                PseudonymService::restore(config, &auths, dump.sessions, dump.session_keys)
+                PseudonymService::restore(config, auths, dump.sessions, dump.session_keys)
                     .expect("Failed to restore service from state")
             }
             Err(e) => {
                 eprintln!("Failed to read state file: {}, creating new service", e);
-                PseudonymService::new(config, &auths).expect("Failed to create new service")
+                PseudonymService::new(config, auths).expect("Failed to create new service")
             }
         }
     } else {
-        PseudonymService::new(config, &auths).expect("Failed to create new service")
+        PseudonymService::new(config, auths).expect("Failed to create new service")
     };
 
     // Execute the subcommand

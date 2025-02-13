@@ -18,10 +18,10 @@ pub struct PseudonymServiceConfig {
 } // TODO servers should host these configs in a well-known location
 
 #[derive(Clone)]
-pub struct PseudonymService<'a> {
+pub struct PseudonymService {
     // Now only needs lifetime param, no generic A
     config: PseudonymServiceConfig,
-    transcryptors: Vec<TranscryptorClient<'a>>,
+    transcryptors: Vec<TranscryptorClient>,
     pub pep_crypto_client: Option<PEPClient>, // TODO make this private
 }
 
@@ -41,10 +41,10 @@ pub enum PseudonymServiceError {
 
 /// Convert encrypted pseudonyms into your own pseudonyms, using the [PseudonymService].
 /// The service will communicate with the configured transcryptors, and wraps around a [PEPClient] for cryptographic operations.
-impl<'a> PseudonymService<'a> {
+impl PseudonymService {
     pub fn new(
         config: PseudonymServiceConfig,
-        auths: &'a SystemAuths,
+        auths: SystemAuths, // Take ownership of SystemAuths
     ) -> Result<Self, PseudonymServiceError> {
         let transcryptors = config
             .transcryptors
@@ -66,7 +66,7 @@ impl<'a> PseudonymService<'a> {
     /// Restore a [PseudonymService] from a dumped state.
     pub fn restore(
         config: PseudonymServiceConfig,
-        auths: &'a SystemAuths,
+        auths: SystemAuths,
         session_ids: EncryptionContexts,
         session_keys: (SessionPublicKey, SessionSecretKey),
     ) -> Result<Self, PseudonymServiceError> {

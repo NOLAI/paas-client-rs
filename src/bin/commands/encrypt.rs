@@ -12,7 +12,7 @@ pub fn command() -> Command {
     )
 }
 
-pub async fn execute(matches: &clap::ArgMatches, service: &mut PseudonymService<'_>) {
+pub async fn execute(matches: &clap::ArgMatches, service: &mut PseudonymService) {
     let pseudonym_string = matches
         .get_one::<String>("pseudonym")
         .expect("pseudonym is required");

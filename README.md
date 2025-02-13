@@ -64,7 +64,7 @@ let sessions = EncryptionContexts(HashMap::from([
 let domain_from = PseudonymizationDomain::from("domain1");
 let domain_to = PseudonymizationDomain::from("domain2");
 
-let mut service = PseudonymService::new(config, &auths).expect("Failed to create service");
+let mut service = PseudonymService::new(config, auths).expect("Failed to create service");
 let result = service.pseudonymize(&encrypted_pseudonym, &sessions, &domain_from, &domain_to).await.expect("Failed to pseudonymize");
 let pseudonym = service.decrypt(result).await.expect("Failed to decrypt");
 ```
