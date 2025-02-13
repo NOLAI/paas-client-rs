@@ -12,7 +12,7 @@ pub fn command() -> Command {
     )
 }
 
-pub async fn execute(matches: &clap::ArgMatches, service: &mut PseudonymService) {
+pub async fn execute(matches: &clap::ArgMatches, service: &mut PseudonymService<'_>) {
     let pseudonym_string = matches
         .get_one::<String>("pseudonym")
         .expect("pseudonym is required");
@@ -21,7 +21,10 @@ pub async fn execute(matches: &clap::ArgMatches, service: &mut PseudonymService)
 
     let rng = &mut OsRng;
 
-    let (encrypted, sessions) = service.encrypt(&pseudonym, rng).await;
+    let (encrypted, sessions) = service
+        .encrypt(&pseudonym, rng)
+        .await
+        .expect("Failed to encrypt");
 
     println!("Encrypted pseudonym: {}", encrypted.as_base64());
     println!("Sessions: {}", sessions.encode());

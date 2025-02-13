@@ -2,10 +2,12 @@ mod commands;
 
 use clap::{Arg, Command};
 use libpep::high_level::keys::{SessionPublicKey, SessionSecretKey};
-use paas_client::auth::AuthTokens;
+use paas_api::status::SystemId;
+use paas_client::auth::{BearerTokenAuth, SystemAuths};
 use paas_client::pseudonym_service::{PseudonymService, PseudonymServiceConfig};
 use paas_client::sessions::EncryptionContexts;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 
 #[derive(Serialize, Deserialize)]
@@ -60,21 +62,28 @@ async fn main() {
         .get_one::<String>("tokens")
         .expect("tokens path is required");
     let tokens_contents = fs::read_to_string(tokens_path).expect("Failed to read tokens file");
-    let tokens: AuthTokens =
+    let tokens_map: HashMap<SystemId, BearerTokenAuth> =
         serde_json::from_str(&tokens_contents).expect("Failed to parse tokens");
+    let auths: SystemAuths = SystemAuths::from_auths(tokens_map);
 
     // Restore the service from the state dump if it exists
     let state_path = matches.get_one::<String>("state_path");
     let mut service = if let Some(path) = state_path {
-        if let Ok(contents) = fs::read_to_string(path) {
-            let dump: PseudonymServiceDump =
-                serde_json::from_str(&contents).expect("Failed to deserialize service state");
-            PseudonymService::restore(config, tokens, dump.sessions, dump.session_keys)
-        } else {
-            PseudonymService::new(config, tokens)
+        match fs::read_to_string(path) {
+            Ok(contents) => {
+                let dump: PseudonymServiceDump = serde_json::from_str(&contents)
+                    .expect("Failed to deserialize service state from file");
+
+                PseudonymService::restore(config, &auths, dump.sessions, dump.session_keys)
+                    .expect("Failed to restore service from state")
+            }
+            Err(e) => {
+                eprintln!("Failed to read state file: {}, creating new service", e);
+                PseudonymService::new(config, &auths).expect("Failed to create new service")
+            }
         }
     } else {
-        PseudonymService::new(config, tokens)
+        PseudonymService::new(config, &auths).expect("Failed to create new service")
     };
 
     // Execute the subcommand
@@ -92,7 +101,7 @@ async fn main() {
 
     // Write the state dump to the file
     if let Some(path) = state_path {
-        let (sessions, session_keys) = service.dump();
+        let (sessions, session_keys) = service.dump().expect("Failed to dump state");
         let dump = PseudonymServiceDump {
             sessions,
             session_keys,

@@ -1,6 +1,6 @@
 [package]
 name = "paas-client"
-version = "0.5.8"
+version = "0.6.0"
 authors = [
     "Job Doesburg <job@jobdoesburg.nl>",
     "Julian van der Horst <julian.vanderhorst@ru.nl"
@@ -36,6 +36,8 @@ chrono = "0.4.39"
 clap = { version = "4.5.27", optional = true }
 tokio = { version = "1.0.0", features = ["rt", "rt-multi-thread", "macros"] }
 base64 = "0.22.1"
+async-trait = "0.1.86"
+thiserror = "2.0.11"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }

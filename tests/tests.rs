@@ -3,7 +3,7 @@ use libpep::high_level::contexts::{EncryptionContext, PseudonymizationDomain};
 use libpep::high_level::data_types::{Encrypted, EncryptedPseudonym};
 use libpep::high_level::keys::{GlobalPublicKey, PublicKey};
 use mockito::mock;
-use paas_client::auth::AuthTokens;
+use paas_client::auth::{BearerTokenAuth, SystemAuths};
 use paas_client::pseudonym_service::{PseudonymService, PseudonymServiceConfig};
 use paas_client::sessions::EncryptionContexts;
 use paas_client::transcryptor_client::TranscryptorConfig;
@@ -37,12 +37,18 @@ async fn test_create_pep_client() {
             },
         ],
     };
-    let auth_tokens = AuthTokens(HashMap::from([
-        ("test_system_1".to_string(), "test_token_1".to_string()),
-        ("test_system_2".to_string(), "test_token_2".to_string()),
+    let auths = SystemAuths::from_auths(HashMap::from([
+        (
+            "test_system_1".to_string(),
+            BearerTokenAuth::new("test_token_1".to_string()),
+        ),
+        (
+            "test_system_2".to_string(),
+            BearerTokenAuth::new("test_token_2".to_string()),
+        ),
     ]));
-    let mut service = PseudonymService::new(config, auth_tokens);
-    service.init().await;
+    let mut service = PseudonymService::new(config, &auths).expect("Failed to create service");
+    service.init().await.expect("Failed to init service");
     assert!(service.pep_crypto_client.is_some());
 }
 
@@ -82,9 +88,16 @@ async fn test_pseudonymize() {
             },
         ],
     };
-    let auth_tokens = AuthTokens(HashMap::from([
-        ("test_system_1".to_string(), "test_token_1".to_string()),
-        ("test_system_2".to_string(), "test_token_2".to_string()),
+
+    let auths = SystemAuths::from_auths(HashMap::from([
+        (
+            "test_system_1".to_string(),
+            BearerTokenAuth::new("test_token_1".to_string()),
+        ),
+        (
+            "test_system_2".to_string(),
+            BearerTokenAuth::new("test_token_2".to_string()),
+        ),
     ]));
 
     let encrypted_pseudonym = EncryptedPseudonym::from_base64(
@@ -105,10 +118,11 @@ async fn test_pseudonymize() {
     let domain_from = PseudonymizationDomain::from("domain1");
     let domain_to = PseudonymizationDomain::from("domain2");
 
-    let mut service = PseudonymService::new(config, auth_tokens);
+    let mut service = PseudonymService::new(config, &auths).expect("Failed to create service");
     let result = service
         .pseudonymize(&encrypted_pseudonym, &sessions, &domain_from, &domain_to)
-        .await;
+        .await
+        .expect("Failed to pseudonymize");
     // We dont test the actual result, just check with the content of the mock response
     assert_eq!(result, EncryptedPseudonym::from_base64("gqmiHiFA8dMdNtbCgsJ-EEfT9fjTV91BrfcHKN57e2vaLR2_UJEVExd6o9tdZg7vKGQklYZwV3REOaOQedKtUA==").unwrap());
 }
