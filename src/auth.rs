@@ -3,6 +3,7 @@ use paas_api::status::SystemId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::error::Error;
+use std::sync::Arc;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AuthError {
@@ -13,14 +14,14 @@ pub enum AuthError {
 }
 
 #[async_trait]
-pub trait Auth {
+pub trait Auth: Send + Sync + 'static {
     fn token_type(&self) -> &str;
-    async fn token(&self) -> Result<String, Box<dyn Error + Send + Sync>>;
+    async fn token(&self) -> Result<String, Box<dyn Error>>;
 
     async fn authenticate(
         &self,
         headers: &mut reqwest::header::HeaderMap,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), Box<dyn Error>> {
         let auth_value = format!("{} {}", self.token_type(), self.token().await?);
         headers.insert(
             reqwest::header::AUTHORIZATION,
@@ -32,18 +33,12 @@ pub trait Auth {
 
 #[async_trait]
 pub(crate) trait RequestBuilderExt {
-    async fn with_auth<A: Auth + Send + Sync + ?Sized>(
-        self,
-        auth: &A,
-    ) -> Result<reqwest::RequestBuilder, AuthError>;
+    async fn with_auth(self, auth: &Arc<dyn Auth>) -> Result<reqwest::RequestBuilder, AuthError>;
 }
 
 #[async_trait]
 impl RequestBuilderExt for reqwest::RequestBuilder {
-    async fn with_auth<A: Auth + Send + Sync + ?Sized>(
-        self,
-        auth: &A,
-    ) -> Result<reqwest::RequestBuilder, AuthError> {
+    async fn with_auth(self, auth: &Arc<dyn Auth>) -> Result<reqwest::RequestBuilder, AuthError> {
         let auth_value = format!(
             "{} {}",
             auth.token_type(),
@@ -72,26 +67,28 @@ impl Auth for BearerTokenAuth {
         "Bearer"
     }
 
-    async fn token(&self) -> Result<String, Box<dyn Error + Send + Sync>> {
+    async fn token(&self) -> Result<String, Box<dyn Error>> {
         Ok(self.token.clone())
     }
 }
 
-pub struct SystemAuths(pub HashMap<SystemId, Box<dyn Auth + Send + Sync>>);
+pub struct SystemAuths(pub HashMap<SystemId, Arc<dyn Auth>>);
 
 impl SystemAuths {
-    pub fn new(auths: HashMap<SystemId, Box<dyn Auth + Send + Sync>>) -> Self {
+    pub fn new(auths: HashMap<SystemId, Arc<dyn Auth>>) -> Self {
         Self(auths)
     }
-    pub fn from_auths<A: Auth + Send + Sync + 'static>(auths: HashMap<SystemId, A>) -> Self {
+
+    pub fn from_auths<A: Auth>(auths: HashMap<SystemId, A>) -> Self {
         Self::new(
             auths
                 .into_iter()
-                .map(|(id, auth)| (id, Box::new(auth) as Box<dyn Auth + Send + Sync>))
+                .map(|(id, auth)| (id, Arc::new(auth) as Arc<dyn Auth>))
                 .collect(),
         )
     }
-    pub fn get(&self, system_id: &SystemId) -> Option<&(dyn Auth + Send + Sync)> {
-        self.0.get(system_id).map(|auth| auth.as_ref())
+
+    pub fn get(&self, system_id: &SystemId) -> Option<Arc<dyn Auth>> {
+        self.0.get(system_id).map(Arc::clone)
     }
 }

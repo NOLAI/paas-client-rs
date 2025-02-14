@@ -10,6 +10,7 @@ use paas_api::transcrypt::{
     PseudonymizationResponse,
 };
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TranscryptorConfig {
@@ -39,17 +40,17 @@ pub enum TranscryptorError {
 
 pub type AuthToken = String;
 
-/// A client that communicates with a single Transcryptor.
 #[derive(Clone)]
-pub struct TranscryptorClient<'a> {
+/// A client that communicates with a single Transcryptor.
+pub struct TranscryptorClient {
     pub(crate) config: TranscryptorConfig,
-    auth: &'a (dyn Auth + Send + Sync), // Now references trait object
+    auth: Arc<dyn Auth>, // Now owns the Auth
     status: TranscryptorStatus,
     pub session_id: Option<EncryptionContext>,
 }
-impl<'a> TranscryptorClient<'a> {
+impl TranscryptorClient {
     /// Create a new TranscryptorClient with the given configuration.
-    pub fn new(config: TranscryptorConfig, auth: &'a (dyn Auth + Send + Sync)) -> Self {
+    pub fn new(config: TranscryptorConfig, auth: Arc<dyn Auth>) -> Self {
         Self {
             config,
             auth,
@@ -62,7 +63,7 @@ impl<'a> TranscryptorClient<'a> {
     }
     pub fn restore(
         config: TranscryptorConfig,
-        auth: &'a (dyn Auth + Send + Sync),
+        auth: Arc<dyn Auth>,
         session_id: EncryptionContext,
     ) -> Self {
         Self {
@@ -100,7 +101,7 @@ impl<'a> TranscryptorClient<'a> {
     pub async fn check_status(&mut self) -> Result<(), TranscryptorError> {
         let response = reqwest::Client::new()
             .get(self.make_url(paas_api::paths::STATUS))
-            .with_auth(self.auth)
+            .with_auth(&self.auth) // Remove as_ref()
             .await?
             .send()
             .await?;
@@ -126,7 +127,7 @@ impl<'a> TranscryptorClient<'a> {
                 paas_api::paths::sessions::SCOPE,
                 paas_api::paths::sessions::START,
             ))
-            .with_auth(self.auth)
+            .with_auth(&self.auth) // Remove as_ref()
             .await?
             .send()
             .await?;
@@ -155,7 +156,7 @@ impl<'a> TranscryptorClient<'a> {
         };
         let response = reqwest::Client::new()
             .post(self.make_url(paas_api::paths::transcrypt::PSEUDONYMIZE))
-            .with_auth(self.auth)
+            .with_auth(&self.auth) // Remove as_ref()
             .await?
             .json(&request)
             .send()
@@ -182,7 +183,7 @@ impl<'a> TranscryptorClient<'a> {
         };
         let response = reqwest::Client::new()
             .get(self.make_url(paas_api::paths::transcrypt::PSEUDONYMIZE_BATCH))
-            .with_auth(self.auth)
+            .with_auth(&self.auth) // Remove as_ref()
             .await?
             .json(&request)
             .send()
