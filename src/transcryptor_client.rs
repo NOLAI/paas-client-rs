@@ -279,7 +279,7 @@ impl TranscryptorClient {
             session_to: session_to.clone(),
         };
         let response = reqwest::Client::new()
-            .post(self.make_url(paas_api::paths::transcrypt::PSEUDONYMIZE))
+            .post(self.make_url(paas_api::paths::PSEUDONYMIZE))
             .with_auth(&self.auth)
             .await?
             .json(&request)
@@ -308,7 +308,7 @@ impl TranscryptorClient {
             session_to: session_to.clone(),
         };
         let response = reqwest::Client::new()
-            .post(self.make_url(paas_api::paths::transcrypt::PSEUDONYMIZE_BATCH))
+            .post(self.make_url(paas_api::paths::PSEUDONYMIZE_BATCH))
             .with_auth(&self.auth)
             .await?
             .json(&request)
@@ -333,7 +333,7 @@ impl TranscryptorClient {
             session_to: session_to.clone(),
         };
         let response = reqwest::Client::new()
-            .post(self.make_url(paas_api::paths::transcrypt::REKEY))
+            .post(self.make_url(paas_api::paths::REKEY))
             .with_auth(&self.auth)
             .await?
             .json(&request)
@@ -356,7 +356,7 @@ impl TranscryptorClient {
             session_to: session_to.clone(),
         };
         let response = reqwest::Client::new()
-            .post(self.make_url(paas_api::paths::transcrypt::REKEY_BATCH))
+            .post(self.make_url(paas_api::paths::REKEY_BATCH))
             .with_auth(&self.auth)
             .await?
             .json(&request)
@@ -386,7 +386,7 @@ impl TranscryptorClient {
             session_to: session_to.clone(),
         };
         let response = reqwest::Client::new()
-            .post(self.make_url(paas_api::paths::transcrypt::TRANSCRYPT))
+            .post(self.make_url(paas_api::paths::TRANSCRYPT))
             .with_auth(&self.auth)
             .await?
             .json(&request)
