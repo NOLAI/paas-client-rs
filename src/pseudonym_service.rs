@@ -88,7 +88,6 @@ impl PseudonymService {
         session_key_shares: SessionKeyShares,
         session_keys: (SessionPublicKey, SessionSecretKey),
     ) -> Result<Self, PseudonymServiceError> {
-        
         let transcryptors =
             futures::future::try_join_all(config.transcryptors.iter().map(|c| async {
                 let auth = auths
