@@ -39,6 +39,8 @@ pub struct PseudonymService {
     pep_crypto_client: Option<PEPClient>,
 }
 
+pub type SessionKeyShares = HashMap<SystemId, SessionKeyShare>;
+
 /// Convert encrypted pseudonyms into your own pseudonyms, using the [PseudonymService].
 /// The service will communicate with the configured transcryptors, and wraps around a [PEPClient] for cryptographic operations.
 impl PseudonymService {
@@ -54,12 +56,12 @@ impl PseudonymService {
 
                 let mut client = TranscryptorClient::new(c.clone(), auth)
                     .await
-                    .map_err(|e| PseudonymServiceError::TranscryptorError(e))?;
+                    .map_err(PseudonymServiceError::TranscryptorError)?;
 
                 let reported_config = client
                     .check_config()
                     .await
-                    .map_err(|e| PseudonymServiceError::TranscryptorError(e))?;
+                    .map_err(PseudonymServiceError::TranscryptorError)?;
 
                 if reported_config != config {
                     return Err(PseudonymServiceError::InconsistentConfig {
@@ -83,9 +85,10 @@ impl PseudonymService {
         config: PAASConfig,
         auths: SystemAuths,
         session_ids: EncryptionContexts,
-        session_key_shares: HashMap<SystemId, SessionKeyShare>,
+        session_key_shares: SessionKeyShares,
         session_keys: (SessionPublicKey, SessionSecretKey),
     ) -> Result<Self, PseudonymServiceError> {
+        
         let transcryptors =
             futures::future::try_join_all(config.transcryptors.iter().map(|c| async {
                 let auth = auths
@@ -101,14 +104,14 @@ impl PseudonymService {
                 })?;
 
                 let mut client =
-                    TranscryptorClient::restore(c.clone(), auth, session_id.clone(), sks.clone())
+                    TranscryptorClient::restore(c.clone(), auth, session_id.clone(), *sks)
                         .await
-                        .map_err(|e| PseudonymServiceError::TranscryptorError(e))?;
+                        .map_err(PseudonymServiceError::TranscryptorError)?;
 
                 let reported_config = client
                     .check_config()
                     .await
-                    .map_err(|e| PseudonymServiceError::TranscryptorError(e))?;
+                    .map_err(PseudonymServiceError::TranscryptorError)?;
 
                 if reported_config != config {
                     return Err(PseudonymServiceError::InconsistentConfig {
@@ -134,7 +137,7 @@ impl PseudonymService {
         (
             EncryptionContexts,
             (SessionPublicKey, SessionSecretKey),
-            HashMap<SystemId, SessionKeyShare>,
+            SessionKeyShares,
         ),
         PseudonymServiceError,
     > {
@@ -148,7 +151,7 @@ impl PseudonymService {
         let mut session_key_shares = HashMap::new();
         for transcryptor in &self.transcryptors {
             if let Some(key_share) = transcryptor.sks.as_ref() {
-                session_key_shares.insert(transcryptor.config.system_id.clone(), key_share.clone());
+                session_key_shares.insert(transcryptor.config.system_id.clone(), *key_share);
             }
         }
 
@@ -177,7 +180,7 @@ impl PseudonymService {
             client
                 .end_session()
                 .await
-                .map_err(|e| PseudonymServiceError::TranscryptorError(e))
+                .map_err(PseudonymServiceError::TranscryptorError)
         }))
         .await?;
 
@@ -189,7 +192,7 @@ impl PseudonymService {
         &mut self,
         transcryptor_index: usize,
     ) -> Result<(), PseudonymServiceError> {
-        let old_sks = self.transcryptors[transcryptor_index].sks.clone();
+        let old_sks = self.transcryptors[transcryptor_index].sks;
 
         let (_, new_sks) = {
             let transcryptor = &mut self.transcryptors[transcryptor_index];

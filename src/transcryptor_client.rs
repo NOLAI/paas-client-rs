@@ -105,11 +105,7 @@ impl TranscryptorClient {
         Option<EncryptionContext>,
         Option<SessionKeyShare>,
     ) {
-        (
-            self.config.clone(),
-            self.session_id.clone(),
-            self.sks.clone(),
-        )
+        (self.config.clone(), self.session_id.clone(), self.sks)
     }
     fn make_url(&self, path: &str) -> String {
         format!(
@@ -221,7 +217,7 @@ impl TranscryptorClient {
             .await?;
 
         self.session_id = Some(session.session_id.clone());
-        self.sks = Some(session.key_share.clone());
+        self.sks = Some(session.key_share);
         Ok((session.session_id, session.key_share))
     }
 
@@ -298,7 +294,7 @@ impl TranscryptorClient {
     /// Ask the transcryptor to pseudonymize a batch of encrypted pseudonyms.
     pub async fn pseudonymize_batch(
         &self,
-        encrypted_pseudonyms: &Vec<EncryptedPseudonym>,
+        encrypted_pseudonyms: &[EncryptedPseudonym],
         domain_from: &PseudonymizationDomain,
         domain_to: &PseudonymizationDomain,
         session_from: &EncryptionContext,
@@ -350,7 +346,7 @@ impl TranscryptorClient {
     /// Ask the transcryptor to rekey a batch of encrypted data points.
     pub async fn rekey_batch(
         &self,
-        encrypted_data: &Vec<EncryptedDataPoint>,
+        encrypted_data: &[EncryptedDataPoint],
         session_from: &EncryptionContext,
         session_to: &EncryptionContext,
     ) -> Result<Vec<EncryptedDataPoint>, TranscryptorError> {
@@ -376,7 +372,7 @@ impl TranscryptorClient {
     /// Ask the transcryptor to transcrypt data consisting of multiple pseudonyms and data points belonging to different entities.
     pub async fn transcrypt(
         &self,
-        encrypted: &Vec<EncryptedEntityData>,
+        encrypted: &[EncryptedEntityData],
         domain_from: &PseudonymizationDomain,
         domain_to: &PseudonymizationDomain,
         session_from: &EncryptionContext,
