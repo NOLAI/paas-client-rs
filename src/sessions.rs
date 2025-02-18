@@ -7,7 +7,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
-pub struct EncryptionContexts(pub HashMap<String, EncryptionContext>);
+pub struct EncryptionContexts(pub HashMap<SystemId, EncryptionContext>);
 impl EncryptionContexts {
     pub fn get(&self, system_id: &SystemId) -> Option<&EncryptionContext> {
         self.0.get(system_id)
