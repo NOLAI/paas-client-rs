@@ -1,9 +1,11 @@
+mod auth;
 mod commands;
+mod oidc_auth;
 
+use crate::auth::ensure_authenticated;
 use clap::{Arg, Command};
 use libpep::high_level::keys::{SessionPublicKey, SessionSecretKey};
 use paas_api::config::PAASConfig;
-use paas_api::status::SystemId;
 use paas_client::auth::{BearerTokenAuth, SystemAuths};
 use paas_client::pseudonym_service::{PseudonymService, SessionKeyShares};
 use paas_client::sessions::EncryptionContexts;
@@ -17,6 +19,15 @@ struct PseudonymServiceDump {
     session_keys: (SessionPublicKey, SessionSecretKey),
     session_key_shares: SessionKeyShares,
 }
+async fn load_config(config_path: &str) -> Result<String, Box<dyn std::error::Error>> {
+    if config_path.starts_with("http://") || config_path.starts_with("https://") {
+        let response = reqwest::get(config_path).await?;
+        Ok(response.text().await?)
+    } else {
+        // Load config from local file
+        Ok(fs::read_to_string(config_path)?)
+    }
+}
 
 #[tokio::main]
 async fn main() {
@@ -26,17 +37,25 @@ async fn main() {
         .about(env!("CARGO_PKG_DESCRIPTION"))
         .arg(
             Arg::new("config")
-                .help("Path to the configuration file")
+                .help("Path to the configuration file or trusted URL to download from")
                 .long("config")
                 .short('c')
                 .global(true)
                 .value_parser(clap::value_parser!(String)),
         )
         .arg(
-            Arg::new("tokens")
-                .help("Path to the file containing auth tokens")
-                .long("tokens")
-                .short('t')
+            Arg::new("auth_store")
+                .help("Path to the authentication store file")
+                .long("auth-store")
+                .short('a')
+                .global(true)
+                .value_parser(clap::value_parser!(String)),
+        )
+        .arg(
+            Arg::new("oidc_config")
+                .help("Path to OIDC configuration file")
+                .long("oidc-config")
+                .short('o')
                 .global(true)
                 .value_parser(clap::value_parser!(String)),
         )
@@ -52,21 +71,43 @@ async fn main() {
         .subcommand(commands::encrypt::command())
         .get_matches();
 
-    // Load the configuration and auth tokens
     let config_path = matches
         .get_one::<String>("config")
         .expect("config path is required");
-    let config_contents = fs::read_to_string(config_path).expect("Failed to read config file");
+
+    let auth_store_path = matches
+        .get_one::<String>("auth_store")
+        .expect("auth store path is required");
+
+    let oidc_config_path = matches
+        .get_one::<String>("oidc_config")
+        .expect("oidc config path is required");
+
+    let config_contents = load_config(config_path)
+        .await
+        .expect("Failed to load config file");
+
     let config: PAASConfig =
         serde_json::from_str(&config_contents).expect("Failed to parse config");
 
-    let tokens_path = matches
-        .get_one::<String>("tokens")
-        .expect("tokens path is required");
-    let tokens_contents = fs::read_to_string(tokens_path).expect("Failed to read tokens file");
-    let tokens_map: HashMap<SystemId, BearerTokenAuth> =
-        serde_json::from_str(&tokens_contents).expect("Failed to parse tokens");
-    let auths: SystemAuths = SystemAuths::from_auths(tokens_map);
+    let mut tokens_map = HashMap::new();
+    for config in config.transcryptors.clone() {
+        let access_token = match ensure_authenticated(
+            auth_store_path,
+            oidc_config_path,
+            &config.system_id,
+        )
+        .await
+        {
+            Ok(token) => token,
+            Err(e) => {
+                eprintln!("Authentication failed: {}", e);
+                std::process::exit(1);
+            }
+        };
+        tokens_map.insert(config.system_id.clone(), BearerTokenAuth::new(access_token));
+    }
+    let auths = SystemAuths::from_auths(tokens_map);
 
     // Restore the service from the state dump if it exists
     let state_path = matches.get_one::<String>("state_path");
