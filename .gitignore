@@ -18,3 +18,8 @@ Cargo.lock
 .vscode
 
 .aider*
+
+auth.json
+auth-store.json
+state.json
+config.json

@@ -44,18 +44,18 @@ async fn main() {
                 .value_parser(clap::value_parser!(String)),
         )
         .arg(
-            Arg::new("auth_store")
-                .help("Path to the authentication store file")
-                .long("auth-store")
-                .short('a')
+            Arg::new("auth")
+                .help("Path to authentication configuration file")
+                .long("auth")
+                .short('u')
                 .global(true)
                 .value_parser(clap::value_parser!(String)),
         )
         .arg(
-            Arg::new("oidc_config")
-                .help("Path to OIDC configuration file")
-                .long("oidc-config")
-                .short('o')
+            Arg::new("auth_store")
+                .help("Path to the authentication store file")
+                .long("auth-store")
+                .short('a')
                 .global(true)
                 .value_parser(clap::value_parser!(String)),
         )
@@ -75,13 +75,13 @@ async fn main() {
         .get_one::<String>("config")
         .expect("config path is required");
 
+    let auth_config_path = matches
+        .get_one::<String>("auth")
+        .expect("auth config path is required");
+
     let auth_store_path = matches
         .get_one::<String>("auth_store")
         .expect("auth store path is required");
-
-    let oidc_config_path = matches
-        .get_one::<String>("oidc_config")
-        .expect("oidc config path is required");
 
     let config_contents = load_config(config_path)
         .await
@@ -94,7 +94,7 @@ async fn main() {
     for config in config.transcryptors.clone() {
         let access_token = match ensure_authenticated(
             auth_store_path,
-            oidc_config_path,
+            auth_config_path,
             &config.system_id,
         )
         .await
