@@ -24,13 +24,37 @@ cargo install paas-client
 In addition to the library, a binary `paascli` is available to interact with the PAAS server.
 For example run the following command to pseudonymize an encrypted pseudonym from domain1 to domain2:
 ```bash
-paascli --config config.json --tokens tokens.json --state state.json pseudonymize CvkMpV4E98A1kWReUi0dE4mGRm1ToAj_D5-FrSi1FBqCrqE6d5HNrV8JW6vsGkwputG2S821sfjzjsyFGUPzAg== eyJQYWFTLWRlbW8tMyI6InVzZXIxXzB4T0VpZXBPTjAiLCJQYWFTLWRlbW8tMSI6InVzZXIxXzhGZmhDQU5WVmIiLCJQYWFTLWRlbW8tMiI6InVzZXIxX2tibk5UUVZpYjkifQ== domain1 domain2
+paascli --config config.json --auth auth.json --auth-store auth-store.json --state state.json pseudonymize CvkMpV4E98A1kWReUi0dE4mGRm1ToAj_D5-FrSi1FBqCrqE6d5HNrV8JW6vsGkwputG2S821sfjzjsyFGUPzAg== eyJQYWFTLWRlbW8tMyI6InVzZXIxXzB4T0VpZXBPTjAiLCJQYWFTLWRlbW8tMSI6InVzZXIxXzhGZmhDQU5WVmIiLCJQYWFTLWRlbW8tMiI6InVzZXIxX2tibk5UUVZpYjkifQ== domain1 domain2
 ```
 
 Or during development, you can run:
 ```bash
-cargo run --bin paascli -- --config config.json --tokens tokens.json --state state.json pseudonymize CvkMpV4E98A1kWReUi0dE4mGRm1ToAj_D5-FrSi1FBqCrqE6d5HNrV8JW6vsGkwputG2S821sfjzjsyFGUPzAg== eyJQYWFTLWRlbW8tMyI6InVzZXIxXzB4T0VpZXBPTjAiLCJQYWFTLWRlbW8tMSI6InVzZXIxXzhGZmhDQU5WVmIiLCJQYWFTLWRlbW8tMiI6InVzZXIxX2tibk5UUVZpYjkifQ== domain1 domain2
+cargo run --bin paascli -- --config.json --auth auth.json --auth-store auth-store.json --state state.json pseudonymize CvkMpV4E98A1kWReUi0dE4mGRm1ToAj_D5-FrSi1FBqCrqE6d5HNrV8JW6vsGkwputG2S821sfjzjsyFGUPzAg== eyJQYWFTLWRlbW8tMyI6InVzZXIxXzB4T0VpZXBPTjAiLCJQYWFTLWRlbW8tMSI6InVzZXIxXzhGZmhDQU5WVmIiLCJQYWFTLWRlbW8tMiI6InVzZXIxX2tibk5UUVZpYjkifQ== domain1 domain2
 ```
+
+This expects an `auth.json` file that contains authentication information for your transcryptors, either with simple bearer tokens, or OIDC.
+
+```json
+{
+  "auth": {
+    "system1": {
+      "Oidc": {
+        "client_id": "your-client-id",
+        "client_secret": null,
+        "issuer_url": "open-id-issuer-url",
+        "redirect_url": "http://localhost:31296/callback", // Or some other redirect URL that you receive and your issuer accepts
+        "scopes": [ "some-scope" ]
+      }
+    },
+    "system2": {
+      "BearerToken": {
+        "token": "some-static-api-key"
+      }
+    }
+  }
+}
+```
+
 
 ## Usage
 ```rust
