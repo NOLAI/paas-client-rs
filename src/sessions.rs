@@ -38,3 +38,26 @@ impl<'de> Deserialize<'de> for EncryptionContexts {
         Self::decode(&s).ok_or(Error::custom("Failed to decode EncryptionContexts"))
     }
 }
+
+impl PartialEq for EncryptionContexts {
+    fn eq(&self, other: &Self) -> bool {
+        if self.0.len() != other.0.len() {
+            return false;
+        }
+
+        for (system_id, context) in &self.0 {
+            match other.0.get(system_id) {
+                Some(other_context) => {
+                    if context != other_context {
+                        return false;
+                    }
+                }
+                None => return false,
+            }
+        }
+
+        true
+    }
+}
+
+impl Eq for EncryptionContexts {}

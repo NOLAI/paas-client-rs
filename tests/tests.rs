@@ -3,7 +3,6 @@ use libpep::distributed::key_blinding::{BlindedGlobalSecretKey, SafeScalar};
 use libpep::high_level::contexts::{EncryptionContext, PseudonymizationDomain};
 use libpep::high_level::data_types::{Encrypted, EncryptedPseudonym};
 use libpep::high_level::keys::{GlobalPublicKey, PublicKey};
-use mockito::mock;
 use paas_api::config::{PAASConfig, TranscryptorConfig};
 use paas_api::status::{StatusResponse, VersionInfo};
 use paas_client::auth::{BearerTokenAuth, SystemAuths};
@@ -13,6 +12,8 @@ use std::collections::HashMap;
 
 #[tokio::test]
 async fn test_create_pep_client() {
+    let mut server = mockito::Server::new_async().await;
+
     let config = PAASConfig {
         blinded_global_secret_key: BlindedGlobalSecretKey::decode_from_hex(
             "dacec694506fa1c1ab562059174b022151acab4594723614811eaaa93a9c5908",
@@ -25,11 +26,11 @@ async fn test_create_pep_client() {
         transcryptors: vec![
             TranscryptorConfig {
                 system_id: "test_system_1".to_string(),
-                url: mockito::server_url(),
+                url: server.url(),
             },
             TranscryptorConfig {
                 system_id: "test_system_2".to_string(),
-                url: mockito::server_url(),
+                url: server.url(),
             },
         ],
     };
@@ -44,21 +45,24 @@ async fn test_create_pep_client() {
         timestamp: Utc::now(),
         version_info: VersionInfo::default(),
     };
-    let _status1 = mock("GET", "/status")
+    let _status1 = server
+        .mock("GET", "/status")
         .with_status(200)
         .with_body(serde_json::to_string(&mock_status1).unwrap())
         .create();
-    let _status2 = mock("GET", "/status")
+    let _status2 = server
+        .mock("GET", "/status")
         .with_status(200)
         .with_body(serde_json::to_string(&mock_status2).unwrap())
         .create();
 
-    let _config = mock("GET", "/config")
+    let _config = server
+        .mock("GET", "/config")
         .with_status(200)
         .with_body(serde_json::to_string(&config).unwrap())
         .create();
 
-    let _start = mock("POST", "/sessions/start")
+    let _start = server.mock("POST", "/sessions/start")
         .with_status(200)
         .with_body(r#"{"session_id": "test_session", "key_share": "5f5289d6909083257b9372c362a1905a0f0370181c5b75af812815513edcda0a"}"#)
         .create();
@@ -82,6 +86,8 @@ async fn test_create_pep_client() {
 
 #[tokio::test]
 async fn test_pseudonymize() {
+    let mut server = mockito::Server::new_async().await;
+
     let config = PAASConfig {
         blinded_global_secret_key: BlindedGlobalSecretKey::decode_from_hex(
             "dacec694506fa1c1ab562059174b022151acab4594723614811eaaa93a9c5908",
@@ -94,11 +100,11 @@ async fn test_pseudonymize() {
         transcryptors: vec![
             TranscryptorConfig {
                 system_id: "test_system_1".to_string(),
-                url: mockito::server_url(),
+                url: server.url(),
             },
             TranscryptorConfig {
                 system_id: "test_system_2".to_string(),
-                url: mockito::server_url(),
+                url: server.url(),
             },
         ],
     };
@@ -113,26 +119,29 @@ async fn test_pseudonymize() {
         timestamp: Utc::now(),
         version_info: VersionInfo::default(),
     };
-    let _status1 = mock("GET", "/status")
+    let _status1 = server
+        .mock("GET", "/status")
         .with_status(200)
         .with_body(serde_json::to_string(&mock_status1).unwrap())
         .create();
-    let _status2 = mock("GET", "/status")
+    let _status2 = server
+        .mock("GET", "/status")
         .with_status(200)
         .with_body(serde_json::to_string(&mock_status2).unwrap())
         .create();
 
-    let _config = mock("GET", "/config")
+    let _config = server
+        .mock("GET", "/config")
         .with_status(200)
         .with_body(serde_json::to_string(&config).unwrap())
         .create();
 
-    let _start = mock("POST", "/sessions/start")
+    let _start = server.mock("POST", "/sessions/start")
         .with_status(200)
         .with_body(r#"{"session_id": "test_session", "key_share": "5f5289d6909083257b9372c362a1905a0f0370181c5b75af812815513edcda0a"}"#)
         .create();
 
-    let _pseudonymize = mock("POST", "/pseudonymize")
+    let _pseudonymize = server.mock("POST", "/pseudonymize")
         .with_status(200)
         .with_header("Content-Type", "application/json")
         .with_body(r#"{"encrypted_pseudonym": "gqmiHiFA8dMdNtbCgsJ-EEfT9fjTV91BrfcHKN57e2vaLR2_UJEVExd6o9tdZg7vKGQklYZwV3REOaOQedKtUA=="}"#)
