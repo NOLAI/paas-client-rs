@@ -32,24 +32,22 @@ pub enum TranscryptorError {
 
     #[error("No active session to end")]
     NoSessionToEnd,
-    #[error("Client version {client_version} is incompatible with server version {server_version} (min. supported version {server_min_supported_version})")]
+    #[error(
+        "Client version {client_version} is incompatible with server version {server_version} (min. supported version {server_min_supported_version})"
+    )]
     IncompatibleClientVersionError {
         client_version: String,
         server_version: String,
         server_min_supported_version: String,
     },
-    #[error(
-        "Inconsistent system name (configured: {configured_name}, responded: {responded_name}"
-    )]
+    #[error("Inconsistent system name (configured: {configured_name}, responded: {responded_name}")]
     InconsistentSystemNameError {
         configured_name: String,
         responded_name: String,
     },
     #[error("Inconsistent system name ({name})")]
     InvalidSystemNameError { name: String },
-    #[error(
-        "Inconsistent configuration (configured: {configured_url}, responded: {responded_url}"
-    )]
+    #[error("Inconsistent configuration (configured: {configured_url}, responded: {responded_url}")]
     InconsistentUrlError {
         configured_url: String,
         responded_url: String,
@@ -444,18 +442,15 @@ mod tests {
 
         let response = reqwest::get(server.url()).await;
 
-        dbg!(&response);
-
         let x = t_c
             .process_response::<StatusResponse>(response.unwrap())
             .await;
 
-        // assert_eq!(x, Err(TranscryptorError::InvalidSession("smth".to_owned()))); ///TODO match.
-
         let err_str = "Unknown or expired session: Target session not owned by user";
 
+        #[allow(clippy::assertions_on_constants)]
         match x {
-            Err(TranscryptorError::InvalidSession(err)) if &err == err_str => assert!(true),
+            Err(TranscryptorError::InvalidSession(err)) if err == err_str => assert!(true),
             _ => assert!(false),
         }
     }
