@@ -148,8 +148,7 @@ impl TranscryptorClient {
         let response = reqwest::Client::new()
             .get(self.make_url(paas_api::paths::STATUS))
             .send()
-            .await?
-            .error_for_status()?;
+            .await?;
 
         let status = self.process_response::<StatusResponse>(response).await?;
 
@@ -228,8 +227,7 @@ impl TranscryptorClient {
             .with_auth(&self.auth)
             .await?
             .send()
-            .await?
-            .error_for_status()?;
+            .await?;
 
         let sessions = self.process_response::<SessionResponse>(response).await?;
         Ok(sessions.sessions)
@@ -361,8 +359,7 @@ impl TranscryptorClient {
             .await?
             .json(&request)
             .send()
-            .await?
-            .error_for_status()?;
+            .await?;
         let rekey_response = self
             .process_response::<RekeyBatchResponse>(response)
             .await?;
@@ -391,11 +388,75 @@ impl TranscryptorClient {
             .await?
             .json(&request)
             .send()
-            .await?
-            .error_for_status()?;
+            .await?;
         let transcrypt_response = self
             .process_response::<TranscryptionResponse>(response)
             .await?;
         Ok(transcrypt_response.encrypted)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use async_trait::async_trait;
+    use mockito::Server;
+
+    use super::*;
+
+    struct TestAuth;
+
+    #[async_trait]
+    impl Auth for TestAuth {
+        fn token_type(&self) -> &str {
+            "test"
+        }
+
+        async fn token(&self) -> Result<String, Box<dyn core::error::Error>> {
+            Ok("test".to_owned())
+        }
+    }
+
+    #[tokio::test]
+    async fn error_mapping() {
+        let config = TranscryptorConfig {
+            system_id: "test".to_owned(),
+            url: "example.com".to_owned(),
+        };
+        let auth = Arc::new(TestAuth);
+        let t_c = TranscryptorClient {
+            config,
+            session_id: None,
+            sks: None,
+            auth,
+        };
+
+        let mut server = Server::new_async().await;
+
+        server
+            .mock("GET", "/")
+            .with_status(404)
+            .with_header("content-type", "application/json")
+            .with_body(
+                r#"{"error":"Unknown or expired session: Target session not owned by user"}"#,
+            )
+            .create_async()
+            .await;
+
+        let response = reqwest::get(server.url()).await;
+
+        dbg!(&response);
+
+        let x = t_c
+            .process_response::<StatusResponse>(response.unwrap())
+            .await;
+
+        // assert_eq!(x, Err(TranscryptorError::InvalidSession("smth".to_owned()))); ///TODO match.
+
+        let err_str = "Unknown or expired session: Target session not owned by user";
+
+        match x {
+            Err(TranscryptorError::InvalidSession(err)) if &err == err_str => assert!(true),
+            _ => assert!(false),
+        }
     }
 }
