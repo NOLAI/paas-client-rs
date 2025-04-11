@@ -250,14 +250,19 @@ impl PseudonymService {
             transcrypted = match transcryption_result {
                 Err(TranscryptorError::InvalidSession(_)) => {
                     self.refresh_session(i).await?;
+
                     let transcryptor = &self.transcryptors[i];
+                    let new_session_id = match &self.transcryptors[i].session_id {
+                        Some(id) => id.clone(),
+                        None => return Err(PseudonymServiceError::UninitializedTranscryptor),
+                    };
                     transcryptor
                         .pseudonymize(
                             &transcrypted,
                             domain_from,
                             domain_to,
                             session_from,
-                            &session_id,
+                            &new_session_id,
                         )
                         .await?
                 }
@@ -316,13 +321,17 @@ impl PseudonymService {
                     self.refresh_session(i).await?;
 
                     let transcryptor = &self.transcryptors[i];
+                    let new_session_id = match &self.transcryptors[i].session_id {
+                        Some(id) => id.clone(),
+                        None => return Err(PseudonymServiceError::UninitializedTranscryptor),
+                    };
                     transcryptor
                         .pseudonymize_batch(
                             &transcrypted,
                             domain_from,
                             domain_to,
                             session_from,
-                            &session_id,
+                            &new_session_id,
                         )
                         .await?
                 }
@@ -368,8 +377,12 @@ impl PseudonymService {
                     self.refresh_session(i).await?;
 
                     let transcryptor = &self.transcryptors[i];
+                    let new_session_id = match &self.transcryptors[i].session_id {
+                        Some(id) => id.clone(),
+                        None => return Err(PseudonymServiceError::UninitializedTranscryptor),
+                    };
                     transcryptor
-                        .rekey(&transcrypted, session_from, &session_id)
+                        .rekey(&transcrypted, session_from, &new_session_id)
                         .await?
                 }
                 Err(err) => return Err(PseudonymServiceError::from(err)),
@@ -416,8 +429,12 @@ impl PseudonymService {
                     self.refresh_session(i).await?;
 
                     let transcryptor = &self.transcryptors[i];
+                    let new_session_id = match &self.transcryptors[i].session_id {
+                        Some(id) => id.clone(),
+                        None => return Err(PseudonymServiceError::UninitializedTranscryptor),
+                    };
                     transcryptor
-                        .rekey_batch(&transcrypted, session_from, &session_id)
+                        .rekey_batch(&transcrypted, session_from, &new_session_id)
                         .await?
                 }
                 Err(err) => return Err(PseudonymServiceError::from(err)),
@@ -471,13 +488,17 @@ impl PseudonymService {
                     self.refresh_session(i).await?;
 
                     let transcryptor = &self.transcryptors[i];
+                    let new_session_id = match &self.transcryptors[i].session_id {
+                        Some(id) => id.clone(),
+                        None => return Err(PseudonymServiceError::UninitializedTranscryptor),
+                    };
                     transcryptor
                         .transcrypt(
                             &transcrypted,
                             domain_from,
                             domain_to,
                             session_from,
-                            &session_id,
+                            &new_session_id,
                         )
                         .await?
                 }
