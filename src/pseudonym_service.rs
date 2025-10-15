@@ -194,10 +194,8 @@ impl PseudonymService {
                 .map_err(PseudonymServiceError::from)?
         };
 
-        if old_sks.is_some() && self.pep_crypto_client.is_some() {
-            if let Some(crypto_client) = self.pep_crypto_client.as_mut() {
-                crypto_client.update_session_secret_keys(old_sks.unwrap(), new_sks);
-            }
+        if let (Some(old_sks), Some(crypto_client)) = (old_sks, self.pep_crypto_client.as_mut()) {
+            crypto_client.update_session_secret_keys(old_sks, new_sks);
         } else {
             self.init().await?;
         }
