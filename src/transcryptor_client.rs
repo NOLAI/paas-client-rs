@@ -2,7 +2,7 @@ use crate::auth::{Auth, AuthError, RequestBuilderExt};
 use libpep::distributed::key_blinding::SessionKeyShares;
 use libpep::high_level::contexts::{EncryptionContext, PseudonymizationDomain};
 use libpep::high_level::data_types::{EncryptedAttribute, EncryptedPseudonym};
-use libpep::high_level::ops::{EncryptedData};
+use libpep::high_level::ops::EncryptedData;
 use paas_api::config::{PAASConfig, TranscryptorConfig};
 use paas_api::sessions::{EndSessionRequest, SessionResponse, StartSessionResponse};
 use paas_api::status::{StatusResponse, VersionInfo};

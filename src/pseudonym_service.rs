@@ -4,7 +4,9 @@ use crate::transcryptor_client::{TranscryptorClient, TranscryptorError};
 use libpep::distributed::key_blinding::SessionKeyShares;
 use libpep::distributed::systems::PEPClient;
 use libpep::high_level::contexts::PseudonymizationDomain;
-use libpep::high_level::data_types::{Encryptable, Encrypted, EncryptedAttribute, EncryptedPseudonym, HasSessionKeys};
+use libpep::high_level::data_types::{
+    Encryptable, Encrypted, EncryptedAttribute, EncryptedPseudonym, HasSessionKeys,
+};
 use libpep::high_level::keys::SessionKeys;
 use libpep::high_level::ops::EncryptedData;
 use paas_api::config::PAASConfig;
@@ -130,21 +132,13 @@ impl PseudonymService {
     /// Dump the current state of the [PseudonymService].
     pub fn dump(
         &self,
-    ) -> Result<
-        (
-            EncryptionContexts,
-            SessionKeys,
-            SessionKeySharess,
-        ),
-        PseudonymServiceError,
-    > {
+    ) -> Result<(EncryptionContexts, SessionKeys, SessionKeySharess), PseudonymServiceError> {
         let session_ids = self.get_current_sessions();
-        let session_keys = self
+        let session_keys = *self
             .pep_crypto_client
             .as_ref()
             .ok_or(PseudonymServiceError::UninitializedPEPClient)?
-            .dump()
-            .clone();
+            .dump();
 
         let mut session_key_shares = HashMap::new();
         for transcryptor in &self.transcryptors {

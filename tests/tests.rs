@@ -1,8 +1,12 @@
 use chrono::Utc;
-use libpep::distributed::key_blinding::{BlindedGlobalKeys, BlindedPseudonymGlobalSecretKey, BlindedAttributeGlobalSecretKey, SafeScalar};
+use libpep::distributed::key_blinding::{
+    BlindedAttributeGlobalSecretKey, BlindedGlobalKeys, BlindedPseudonymGlobalSecretKey, SafeScalar,
+};
 use libpep::high_level::contexts::{EncryptionContext, PseudonymizationDomain};
 use libpep::high_level::data_types::{Encrypted, EncryptedPseudonym};
-use libpep::high_level::keys::{GlobalPublicKeys, PseudonymGlobalPublicKey, AttributeGlobalPublicKey, PublicKey};
+use libpep::high_level::keys::{
+    AttributeGlobalPublicKey, GlobalPublicKeys, PseudonymGlobalPublicKey, PublicKey,
+};
 use paas_api::config::{PAASConfig, TranscryptorConfig};
 use paas_api::status::{StatusResponse, VersionInfo};
 use paas_client::auth::{BearerTokenAuth, SystemAuths};
