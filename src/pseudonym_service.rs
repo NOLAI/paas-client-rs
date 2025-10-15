@@ -1,14 +1,12 @@
 use crate::auth::SystemAuths;
 use crate::sessions::EncryptionContexts;
 use crate::transcryptor_client::{TranscryptorClient, TranscryptorError};
-use libpep::distributed::key_blinding::SessionKeyShare;
+use libpep::distributed::key_blinding::SessionKeyShares;
 use libpep::distributed::systems::PEPClient;
 use libpep::high_level::contexts::PseudonymizationDomain;
-use libpep::high_level::data_types::{
-    Encryptable, Encrypted, EncryptedDataPoint, EncryptedPseudonym,
-};
-use libpep::high_level::keys::{SessionPublicKey, SessionSecretKey};
-use libpep::high_level::ops::EncryptedEntityData;
+use libpep::high_level::data_types::{Encryptable, Encrypted, EncryptedAttribute, EncryptedPseudonym, HasSessionKeys};
+use libpep::high_level::keys::SessionKeys;
+use libpep::high_level::ops::EncryptedData;
 use paas_api::config::PAASConfig;
 use paas_api::status::SystemId;
 use rand_core::{CryptoRng, RngCore};
@@ -23,7 +21,7 @@ pub enum PseudonymServiceError {
     #[error("No session found for system {0}")]
     MissingSession(SystemId),
     #[error("No session key share found for system {0}")]
-    MissingSessionKeyShare(SystemId),
+    MissingSessionKeyShares(SystemId),
     #[error("PEP crypto client not initialized")]
     UninitializedPEPClient,
     #[error("Transcryptor does not have session")]
@@ -39,7 +37,7 @@ pub struct PseudonymService {
     pep_crypto_client: Option<PEPClient>,
 }
 
-pub type SessionKeyShares = HashMap<SystemId, SessionKeyShare>;
+pub type SessionKeySharess = HashMap<SystemId, SessionKeyShares>;
 
 /// Convert encrypted pseudonyms into your own pseudonyms, using the [PseudonymService].
 /// The service will communicate with the configured transcryptors, and wraps around a [PEPClient] for cryptographic operations.
@@ -85,8 +83,8 @@ impl PseudonymService {
         config: PAASConfig,
         auths: SystemAuths,
         session_ids: EncryptionContexts,
-        session_key_shares: SessionKeyShares,
-        session_keys: (SessionPublicKey, SessionSecretKey),
+        session_key_shares: SessionKeySharess,
+        session_keys: SessionKeys,
     ) -> Result<Self, PseudonymServiceError> {
         let transcryptors =
             futures::future::try_join_all(config.transcryptors.iter().map(|c| async {
@@ -99,7 +97,7 @@ impl PseudonymService {
                     .ok_or_else(|| PseudonymServiceError::MissingSession(c.system_id.clone()))?;
 
                 let sks = session_key_shares.get(&c.system_id).ok_or_else(|| {
-                    PseudonymServiceError::MissingSessionKeyShare(c.system_id.clone())
+                    PseudonymServiceError::MissingSessionKeyShares(c.system_id.clone())
                 })?;
 
                 let mut client =
@@ -125,7 +123,7 @@ impl PseudonymService {
         Ok(Self {
             config,
             transcryptors,
-            pep_crypto_client: Some(PEPClient::restore(session_keys.0, session_keys.1)),
+            pep_crypto_client: Some(PEPClient::restore(session_keys)),
         })
     }
 
@@ -135,8 +133,8 @@ impl PseudonymService {
     ) -> Result<
         (
             EncryptionContexts,
-            (SessionPublicKey, SessionSecretKey),
-            SessionKeyShares,
+            SessionKeys,
+            SessionKeySharess,
         ),
         PseudonymServiceError,
     > {
@@ -145,7 +143,8 @@ impl PseudonymService {
             .pep_crypto_client
             .as_ref()
             .ok_or(PseudonymServiceError::UninitializedPEPClient)?
-            .dump();
+            .dump()
+            .clone();
 
         let mut session_key_shares = HashMap::new();
         for transcryptor in &self.transcryptors {
@@ -168,7 +167,7 @@ impl PseudonymService {
             sks.push(key_share);
         }
 
-        self.pep_crypto_client = Some(PEPClient::new(self.config.blinded_global_secret_key, &sks));
+        self.pep_crypto_client = Some(PEPClient::new(self.config.blinded_global_keys, &sks));
 
         Ok(())
     }
@@ -203,7 +202,7 @@ impl PseudonymService {
 
         if old_sks.is_some() && self.pep_crypto_client.is_some() {
             if let Some(crypto_client) = self.pep_crypto_client.as_mut() {
-                crypto_client.update_session_secret_key(old_sks.unwrap(), new_sks);
+                crypto_client.update_session_secret_keys(old_sks.unwrap(), new_sks);
             }
         } else {
             self.init().await?;
@@ -345,9 +344,9 @@ impl PseudonymService {
     /// Transform an encrypted data point encrypted in one session into a data point you can decrypt.
     pub async fn rekey(
         &mut self,
-        encrypted_data_point: &EncryptedDataPoint,
+        encrypted_data_point: &EncryptedAttribute,
         sessions_from: &EncryptionContexts,
-    ) -> Result<EncryptedDataPoint, PseudonymServiceError> {
+    ) -> Result<EncryptedAttribute, PseudonymServiceError> {
         if self.pep_crypto_client.is_none() {
             self.init().await?;
         }
@@ -397,9 +396,9 @@ impl PseudonymService {
     /// If you need to preserve the order, you should call the [rekey] method for each data points individually. (TODO: add a feature flag to preserve order)
     pub async fn rekey_batch(
         &mut self,
-        encrypted_data_points: &[EncryptedDataPoint],
+        encrypted_data_points: &[EncryptedAttribute],
         sessions_from: &EncryptionContexts,
-    ) -> Result<Vec<EncryptedDataPoint>, PseudonymServiceError> {
+    ) -> Result<Vec<EncryptedAttribute>, PseudonymServiceError> {
         if self.pep_crypto_client.is_none() {
             self.init().await?;
         }
@@ -448,11 +447,11 @@ impl PseudonymService {
     /// Notice that the order of the entities in the input and output vectors are NOT the same, to prevent linking.
     pub async fn transcrypt(
         &mut self,
-        encrypted: &[EncryptedEntityData],
+        encrypted: &[EncryptedData],
         sessions_from: &EncryptionContexts,
         domain_from: &PseudonymizationDomain,
         domain_to: &PseudonymizationDomain,
-    ) -> Result<Vec<EncryptedEntityData>, PseudonymServiceError> {
+    ) -> Result<Vec<EncryptedData>, PseudonymServiceError> {
         if self.pep_crypto_client.is_none() {
             self.init().await?;
         }
@@ -510,7 +509,7 @@ impl PseudonymService {
         Ok(transcrypted)
     }
     /// Encrypt a message using the [PEPClient]'s current session.
-    pub async fn encrypt<R: RngCore + CryptoRng, E: Encryptable>(
+    pub async fn encrypt<R: RngCore + CryptoRng, E: Encryptable + HasSessionKeys + 'static>(
         &mut self,
         message: &E,
         rng: &mut R,
@@ -551,7 +550,10 @@ impl PseudonymService {
     pub async fn decrypt<E: Encrypted>(
         &mut self,
         encrypted: &E,
-    ) -> Result<E::UnencryptedType, PseudonymServiceError> {
+    ) -> Result<E::UnencryptedType, PseudonymServiceError>
+    where
+        E::UnencryptedType: HasSessionKeys + 'static,
+    {
         if self.pep_crypto_client.is_none() {
             self.init().await?;
         }

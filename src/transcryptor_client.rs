@@ -1,8 +1,8 @@
 use crate::auth::{Auth, AuthError, RequestBuilderExt};
-use libpep::distributed::key_blinding::SessionKeyShare;
+use libpep::distributed::key_blinding::SessionKeyShares;
 use libpep::high_level::contexts::{EncryptionContext, PseudonymizationDomain};
-use libpep::high_level::data_types::{EncryptedDataPoint, EncryptedPseudonym};
-use libpep::high_level::ops::EncryptedEntityData;
+use libpep::high_level::data_types::{EncryptedAttribute, EncryptedPseudonym};
+use libpep::high_level::ops::{EncryptedData};
 use paas_api::config::{PAASConfig, TranscryptorConfig};
 use paas_api::sessions::{EndSessionRequest, SessionResponse, StartSessionResponse};
 use paas_api::status::{StatusResponse, VersionInfo};
@@ -64,7 +64,7 @@ pub struct ErrorResponse {
 pub struct TranscryptorClient {
     pub(crate) config: TranscryptorConfig,
     pub(crate) session_id: Option<EncryptionContext>,
-    pub(crate) sks: Option<SessionKeyShare>,
+    pub(crate) sks: Option<SessionKeyShares>,
     auth: Arc<dyn Auth>,
 }
 impl TranscryptorClient {
@@ -86,7 +86,7 @@ impl TranscryptorClient {
         config: TranscryptorConfig,
         auth: Arc<dyn Auth>,
         session_id: EncryptionContext,
-        sks: SessionKeyShare,
+        sks: SessionKeyShares,
     ) -> Result<TranscryptorClient, TranscryptorError> {
         let mut client = Self {
             config,
@@ -101,7 +101,7 @@ impl TranscryptorClient {
     ) -> (
         TranscryptorConfig,
         Option<EncryptionContext>,
-        Option<SessionKeyShare>,
+        Option<SessionKeyShares>,
     ) {
         (self.config.clone(), self.session_id.clone(), self.sks)
     }
@@ -201,7 +201,7 @@ impl TranscryptorClient {
     /// Start a new session with the transcryptor.
     pub async fn start_session(
         &mut self,
-    ) -> Result<(EncryptionContext, SessionKeyShare), TranscryptorError> {
+    ) -> Result<(EncryptionContext, SessionKeyShares), TranscryptorError> {
         let response = reqwest::Client::new()
             .post(self.make_url(paas_api::paths::SESSIONS_START))
             .with_auth(&self.auth)
@@ -214,8 +214,8 @@ impl TranscryptorClient {
             .await?;
 
         self.session_id = Some(session.session_id.clone());
-        self.sks = Some(session.key_share);
-        Ok((session.session_id, session.key_share))
+        self.sks = Some(session.session_key_shares);
+        Ok((session.session_id, session.session_key_shares))
     }
 
     /// Get all currently active sessions.
@@ -319,12 +319,12 @@ impl TranscryptorClient {
     /// Ask the transcryptor rekey an encrypted data point.
     pub async fn rekey(
         &self,
-        encrypted_data: &EncryptedDataPoint,
+        encrypted_attribute: &EncryptedAttribute,
         session_from: &EncryptionContext,
         session_to: &EncryptionContext,
-    ) -> Result<EncryptedDataPoint, TranscryptorError> {
+    ) -> Result<EncryptedAttribute, TranscryptorError> {
         let request = RekeyRequest {
-            encrypted_data: *encrypted_data,
+            encrypted_attribute: *encrypted_attribute,
             session_from: session_from.clone(),
             session_to: session_to.clone(),
         };
@@ -336,18 +336,18 @@ impl TranscryptorClient {
             .send()
             .await?;
         let rekey_response = self.process_response::<RekeyResponse>(response).await?;
-        Ok(rekey_response.encrypted_data)
+        Ok(rekey_response.encrypted_attribute)
     }
 
     /// Ask the transcryptor to rekey a batch of encrypted data points.
     pub async fn rekey_batch(
         &self,
-        encrypted_data: &[EncryptedDataPoint],
+        encrypt_attributes: &[EncryptedAttribute],
         session_from: &EncryptionContext,
         session_to: &EncryptionContext,
-    ) -> Result<Vec<EncryptedDataPoint>, TranscryptorError> {
+    ) -> Result<Vec<EncryptedAttribute>, TranscryptorError> {
         let request = RekeyBatchRequest {
-            encrypted_data: encrypted_data.to_vec(),
+            encrypted_attributes: encrypt_attributes.to_vec(),
             session_from: session_from.clone(),
             session_to: session_to.clone(),
         };
@@ -361,18 +361,18 @@ impl TranscryptorClient {
         let rekey_response = self
             .process_response::<RekeyBatchResponse>(response)
             .await?;
-        Ok(rekey_response.encrypted_data)
+        Ok(rekey_response.encrypted_attributes)
     }
 
     /// Ask the transcryptor to transcrypt data consisting of multiple pseudonyms and data points belonging to different entities.
     pub async fn transcrypt(
         &self,
-        encrypted: &[EncryptedEntityData],
+        encrypted: &[EncryptedData],
         domain_from: &PseudonymizationDomain,
         domain_to: &PseudonymizationDomain,
         session_from: &EncryptionContext,
         session_to: &EncryptionContext,
-    ) -> Result<Vec<EncryptedEntityData>, TranscryptorError> {
+    ) -> Result<Vec<EncryptedData>, TranscryptorError> {
         let request = TranscryptionRequest {
             encrypted: encrypted.to_vec(),
             domain_from: domain_from.clone(),

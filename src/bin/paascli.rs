@@ -1,11 +1,11 @@
 mod commands;
 
 use clap::{Arg, Command};
-use libpep::high_level::keys::{SessionPublicKey, SessionSecretKey};
+use libpep::high_level::keys::SessionKeys;
 use paas_api::config::PAASConfig;
 use paas_api::status::SystemId;
 use paas_client::auth::{BearerTokenAuth, SystemAuths};
-use paas_client::pseudonym_service::{PseudonymService, SessionKeyShares};
+use paas_client::pseudonym_service::{PseudonymService, SessionKeySharess};
 use paas_client::sessions::EncryptionContexts;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -14,8 +14,8 @@ use std::fs;
 #[derive(Serialize, Deserialize)]
 struct PseudonymServiceDump {
     sessions: EncryptionContexts,
-    session_keys: (SessionPublicKey, SessionSecretKey),
-    session_key_shares: SessionKeyShares,
+    session_keys: SessionKeys,
+    session_key_shares: SessionKeySharess,
 }
 
 #[tokio::main]

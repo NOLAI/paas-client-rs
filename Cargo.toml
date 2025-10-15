@@ -26,8 +26,8 @@ default = ["build-binary"]
 build-binary = ["clap"]
 
 [dependencies]
-paas-api = "0.3"
-libpep = "^0.6.9"
+paas-api = "0.4"
+libpep = "0.7.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 rand_core = { version = "^0.6", features = ["std"] }
