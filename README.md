@@ -53,7 +53,7 @@ let config = PAASConfig {
             "00f1c8be6e2f12c052d2d4ca5fb0fe216a304fb7b218a064f0560ff39359b809"
         ).unwrap(),
     },
-    global_public_key: GlobalPublicKeys {
+    global_public_keys: GlobalPublicKeys {
         pseudonym: PseudonymGlobalPublicKey::from_hex(
             "b408b8dcf99dcf1f9b93692abc66b89bf1869bdd1a24d594d6dea66c5a840262"
         ).unwrap(),

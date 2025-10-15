@@ -29,7 +29,7 @@ async fn test_create_pep_client() {
             )
             .unwrap(),
         },
-        global_public_key: GlobalPublicKeys {
+        global_public_keys: GlobalPublicKeys {
             pseudonym: PseudonymGlobalPublicKey::from_hex(
                 "b408b8dcf99dcf1f9b93692abc66b89bf1869bdd1a24d594d6dea66c5a840262",
             )
@@ -115,7 +115,7 @@ async fn test_pseudonymize() {
             )
             .unwrap(),
         },
-        global_public_key: GlobalPublicKeys {
+        global_public_keys: GlobalPublicKeys {
             pseudonym: PseudonymGlobalPublicKey::from_hex(
                 "b408b8dcf99dcf1f9b93692abc66b89bf1869bdd1a24d594d6dea66c5a840262",
             )

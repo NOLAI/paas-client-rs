@@ -1,6 +1,6 @@
 [package]
 name = "paas-client"
-version = "0.9.0"
+version = "0.9.1"
 authors = [
     "Job Doesburg <job@jobdoesburg.nl>",
     "Julian van der Horst <julian.vanderhorst@ru.nl"
@@ -26,7 +26,7 @@ default = ["build-binary"]
 build-binary = ["clap"]
 
 [dependencies]
-paas-api = "0.4"
+paas-api = "0.5"
 libpep = "0.7.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
