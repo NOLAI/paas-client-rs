@@ -52,6 +52,8 @@ pub enum TranscryptorError {
         configured_url: String,
         responded_url: String,
     },
+    #[error("URL must use HTTPS protocol, got: {scheme}")]
+    NonHttpsUrlError { scheme: String },
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -73,6 +75,12 @@ impl TranscryptorClient {
         config: TranscryptorConfig,
         auth: Arc<dyn Auth>,
     ) -> Result<TranscryptorClient, TranscryptorError> {
+        if config.url.scheme() != "https" {
+            return Err(TranscryptorError::NonHttpsUrlError {
+                scheme: config.url.scheme().to_string(),
+            });
+        }
+
         let mut client = Self {
             config,
             auth,
@@ -82,12 +90,35 @@ impl TranscryptorClient {
         client.check_status().await.and(Ok(client))
     }
 
+    /// Create a new TranscryptorClient with the given configuration, allowing HTTP URLs.
+    /// This should only be used for testing purposes.
+    #[doc(hidden)]
+    pub async fn new_allow_http(
+        config: TranscryptorConfig,
+        auth: Arc<dyn Auth>,
+    ) -> Result<TranscryptorClient, TranscryptorError> {
+        let mut client = Self {
+            config,
+            auth,
+            session_id: None,
+            sks: None,
+        };
+        client.check_status().await.and(Ok(client))
+    }
+
+    /// Restore a TranscryptorClient with an existing session.
     pub async fn restore(
         config: TranscryptorConfig,
         auth: Arc<dyn Auth>,
         session_id: EncryptionContext,
         sks: SessionKeyShares,
     ) -> Result<TranscryptorClient, TranscryptorError> {
+        if config.url.scheme() != "https" {
+            return Err(TranscryptorError::NonHttpsUrlError {
+                scheme: config.url.scheme().to_string(),
+            });
+        }
+
         let mut client = Self {
             config,
             auth,
@@ -108,7 +139,7 @@ impl TranscryptorClient {
     fn make_url(&self, path: &str) -> String {
         format!(
             "{}{}{}",
-            self.config.url.trim_end_matches('/'),
+            self.config.url.as_str().trim_end_matches('/'),
             paas_api::paths::API_BASE,
             path
         )
@@ -190,8 +221,8 @@ impl TranscryptorClient {
 
         if ts_config.url != self.config.url {
             return Err(TranscryptorError::InconsistentUrlError {
-                configured_url: self.config.url.clone(),
-                responded_url: ts_config.url.clone(),
+                configured_url: self.config.url.to_string(),
+                responded_url: ts_config.url.to_string(),
             });
         }
 
@@ -418,7 +449,7 @@ mod tests {
     async fn error_mapping() {
         let config = TranscryptorConfig {
             system_id: "test".to_owned(),
-            url: "example.com".to_owned(),
+            url: "https://example.com".parse().unwrap(),
         };
         let auth = Arc::new(TestAuth);
         let t_c = TranscryptorClient {

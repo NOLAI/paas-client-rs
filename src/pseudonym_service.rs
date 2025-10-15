@@ -44,6 +44,7 @@ pub type SessionKeySharess = HashMap<SystemId, SessionKeyShares>;
 /// Convert encrypted pseudonyms into your own pseudonyms, using the [PseudonymService].
 /// The service will communicate with the configured transcryptors, and wraps around a [PEPClient] for cryptographic operations.
 impl PseudonymService {
+    /// Create a new PseudonymService with the given configuration.
     pub async fn new(
         config: PAASConfig,
         auths: SystemAuths,
@@ -55,6 +56,45 @@ impl PseudonymService {
                     .ok_or_else(|| PseudonymServiceError::MissingAuth(c.system_id.clone()))?;
 
                 let mut client = TranscryptorClient::new(c.clone(), auth)
+                    .await
+                    .map_err(PseudonymServiceError::TranscryptorError)?;
+
+                let reported_config = client
+                    .check_config()
+                    .await
+                    .map_err(PseudonymServiceError::TranscryptorError)?;
+
+                if reported_config != config {
+                    return Err(PseudonymServiceError::InconsistentConfig {
+                        system: c.system_id.clone(),
+                    });
+                }
+
+                Ok(client)
+            }))
+            .await?;
+
+        Ok(Self {
+            config,
+            transcryptors,
+            pep_crypto_client: None,
+        })
+    }
+
+    /// Create a new PseudonymService with the given configuration, allowing HTTP URLs.
+    /// This should only be used for testing purposes.
+    #[doc(hidden)]
+    pub async fn new_allow_http(
+        config: PAASConfig,
+        auths: SystemAuths,
+    ) -> Result<Self, PseudonymServiceError> {
+        let transcryptors =
+            futures::future::try_join_all(config.transcryptors.iter().map(|c| async {
+                let auth = auths
+                    .get(&c.system_id)
+                    .ok_or_else(|| PseudonymServiceError::MissingAuth(c.system_id.clone()))?;
+
+                let mut client = TranscryptorClient::new_allow_http(c.clone(), auth)
                     .await
                     .map_err(PseudonymServiceError::TranscryptorError)?;
 

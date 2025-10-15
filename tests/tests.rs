@@ -42,11 +42,11 @@ async fn test_create_pep_client() {
         transcryptors: vec![
             TranscryptorConfig {
                 system_id: "test_system_1".to_string(),
-                url: server.url(),
+                url: server.url().parse().unwrap(),
             },
             TranscryptorConfig {
                 system_id: "test_system_2".to_string(),
-                url: server.url(),
+                url: server.url().parse().unwrap(),
             },
         ],
     };
@@ -93,7 +93,7 @@ async fn test_create_pep_client() {
             BearerTokenAuth::new("test_token_2".to_string()),
         ),
     ]));
-    let mut service = PseudonymService::new(config, auths)
+    let mut service = PseudonymService::new_allow_http(config, auths)
         .await
         .expect("Failed to create service");
     service.init().await.expect("Failed to init service");
@@ -128,11 +128,11 @@ async fn test_pseudonymize() {
         transcryptors: vec![
             TranscryptorConfig {
                 system_id: "test_system_1".to_string(),
-                url: server.url(),
+                url: server.url().parse().unwrap(),
             },
             TranscryptorConfig {
                 system_id: "test_system_2".to_string(),
-                url: server.url(),
+                url: server.url().parse().unwrap(),
             },
         ],
     };
@@ -204,7 +204,7 @@ async fn test_pseudonymize() {
     let domain_from = PseudonymizationDomain::from("domain1");
     let domain_to = PseudonymizationDomain::from("domain2");
 
-    let mut service = PseudonymService::new(config, auths)
+    let mut service = PseudonymService::new_allow_http(config, auths)
         .await
         .expect("Failed to create service");
     let result = service
