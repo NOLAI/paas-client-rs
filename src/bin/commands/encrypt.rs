@@ -23,7 +23,6 @@ pub async fn execute(matches: &clap::ArgMatches, service: &mut PseudonymService)
 
     let (encrypted, sessions) = service
         .encrypt(&pseudonym, rng)
-        .await
         .expect("Failed to encrypt");
 
     println!("Encrypted pseudonym: {}", encrypted.as_base64());

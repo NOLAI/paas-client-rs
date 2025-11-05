@@ -190,6 +190,11 @@ impl PseudonymService {
         Ok((session_ids?, session_keys, session_key_shares))
     }
 
+    /// Check if the PEP crypto client is initialized.
+    pub fn is_initialized(&self) -> bool {
+        self.pep_crypto_client.is_some()
+    }
+
     /// Start a new session with all configured transcryptors, and initialize a [PEPClient] using the session keys.
     pub async fn init(&mut self) -> Result<(), PseudonymServiceError> {
         let mut sks = vec![];
@@ -197,7 +202,7 @@ impl PseudonymService {
             let (_session_id, key_share) = transcryptor
                 .start_session()
                 .await
-                .map_err(PseudonymServiceError::from)?;
+                .map_err(PseudonymServiceError::TranscryptorError)?;
             sks.push(key_share);
         }
 
@@ -231,7 +236,7 @@ impl PseudonymService {
             transcryptor
                 .start_session()
                 .await
-                .map_err(PseudonymServiceError::from)?
+                .map_err(PseudonymServiceError::TranscryptorError)?
         };
 
         if let (Some(old_sks), Some(crypto_client)) = (old_sks, self.pep_crypto_client.as_mut()) {
@@ -297,7 +302,7 @@ impl PseudonymService {
                         )
                         .await?
                 }
-                Err(err) => return Err(PseudonymServiceError::from(err)),
+                Err(err) => return Err(PseudonymServiceError::TranscryptorError(err)),
                 Ok(value) => value,
             };
         }
@@ -366,7 +371,7 @@ impl PseudonymService {
                         )
                         .await?
                 }
-                Err(err) => return Err(PseudonymServiceError::from(err)),
+                Err(err) => return Err(PseudonymServiceError::TranscryptorError(err)),
                 Ok(value) => value,
             };
         }
@@ -416,7 +421,7 @@ impl PseudonymService {
                         .rekey(&transcrypted, session_from, &new_session_id)
                         .await?
                 }
-                Err(err) => return Err(PseudonymServiceError::from(err)),
+                Err(err) => return Err(PseudonymServiceError::TranscryptorError(err)),
                 Ok(value) => value,
             };
         }
@@ -468,7 +473,7 @@ impl PseudonymService {
                         .rekey_batch(&transcrypted, session_from, &new_session_id)
                         .await?
                 }
-                Err(err) => return Err(PseudonymServiceError::from(err)),
+                Err(err) => return Err(PseudonymServiceError::TranscryptorError(err)),
                 Ok(value) => value,
             };
         }
@@ -533,7 +538,7 @@ impl PseudonymService {
                         )
                         .await?
                 }
-                Err(err) => return Err(PseudonymServiceError::from(err)),
+                Err(err) => return Err(PseudonymServiceError::TranscryptorError(err)),
                 Ok(value) => value,
             };
         }
@@ -541,15 +546,11 @@ impl PseudonymService {
         Ok(transcrypted)
     }
     /// Encrypt a message using the [PEPClient]'s current session.
-    pub async fn encrypt<R: RngCore + CryptoRng, E: Encryptable + HasSessionKeys + 'static>(
+    pub fn encrypt<R: RngCore + CryptoRng, E: Encryptable + HasSessionKeys + 'static>(
         &mut self,
         message: &E,
         rng: &mut R,
     ) -> Result<(E::EncryptedType, EncryptionContexts), PseudonymServiceError> {
-        if self.pep_crypto_client.is_none() {
-            self.init().await?;
-        }
-
         let pep_client = self
             .pep_crypto_client
             .as_ref()
@@ -579,17 +580,13 @@ impl PseudonymService {
     }
 
     /// Decrypt an encrypted message using the [PEPClient]'s current session.
-    pub async fn decrypt<E: Encrypted>(
+    pub fn decrypt<E: Encrypted>(
         &mut self,
         encrypted: &E,
     ) -> Result<E::UnencryptedType, PseudonymServiceError>
     where
         E::UnencryptedType: HasSessionKeys + 'static,
     {
-        if self.pep_crypto_client.is_none() {
-            self.init().await?;
-        }
-
         let pep_client = self
             .pep_crypto_client
             .as_ref()

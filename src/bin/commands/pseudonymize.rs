@@ -1,6 +1,6 @@
 use clap::{Arg, Command};
 use libpep::high_level::contexts::PseudonymizationDomain;
-use libpep::high_level::data_types::{Encrypted, EncryptedPseudonym};
+use libpep::high_level::data_types::{Encryptable, Encrypted, EncryptedPseudonym};
 use paas_client::pseudonym_service::PseudonymService;
 use paas_client::sessions::EncryptionContexts;
 
@@ -82,7 +82,7 @@ pub async fn execute(matches: &clap::ArgMatches, service: &mut PseudonymService)
         eprint!("Transcryption returned: ");
         println!("{}", &result.as_base64());
     } else {
-        let pseudonym = service.decrypt(&result).await.expect("Failed to decrypt");
+        let pseudonym = service.decrypt(&result).expect("Failed to decrypt");
         eprint!("Decrypted pseudonym: ");
         println!("{}", &pseudonym.encode_as_hex());
     }
