@@ -1,18 +1,16 @@
 use crate::auth::SystemAuths;
 use crate::sessions::EncryptionContexts;
 use crate::transcryptor_client::{TranscryptorClient, TranscryptorError};
-use libpep::distributed::key_blinding::SessionKeyShares;
-use libpep::distributed::systems::PEPClient;
-use libpep::high_level::contexts::PseudonymizationDomain;
-use libpep::high_level::data_types::{
-    Encryptable, Encrypted, EncryptedAttribute, EncryptedPseudonym, HasSessionKeys,
-};
-use libpep::high_level::keys::SessionKeys;
-use libpep::high_level::ops::EncryptedData;
 use paas_api::config::PAASConfig;
 use paas_api::status::SystemId;
 use rand_core::{CryptoRng, RngCore};
 use std::collections::HashMap;
+use libpep::core::data::{Encryptable, Encrypted, EncryptedAttribute, EncryptedPseudonym, HasSessionKeys};
+use libpep::core::keys::SessionKeys;
+use libpep::core::transcryption::batch::EncryptedData;
+use libpep::core::transcryption::PseudonymizationDomain;
+use libpep::distributed::client::client::PEPClient;
+use libpep::distributed::server::keys::SessionKeyShares;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PseudonymServiceError {

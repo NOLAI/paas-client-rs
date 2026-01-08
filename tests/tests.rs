@@ -1,18 +1,14 @@
 use chrono::Utc;
-use libpep::distributed::key_blinding::{
-    BlindedAttributeGlobalSecretKey, BlindedGlobalKeys, BlindedPseudonymGlobalSecretKey, SafeScalar,
-};
-use libpep::high_level::contexts::{EncryptionContext, PseudonymizationDomain};
-use libpep::high_level::data_types::{Encrypted, EncryptedPseudonym};
-use libpep::high_level::keys::{
-    AttributeGlobalPublicKey, GlobalPublicKeys, PseudonymGlobalPublicKey, PublicKey,
-};
 use paas_api::config::{PAASConfig, TranscryptorConfig};
 use paas_api::status::{StatusResponse, VersionInfo};
 use paas_client::auth::{BearerTokenAuth, SystemAuths};
 use paas_client::pseudonym_service::PseudonymService;
 use paas_client::sessions::EncryptionContexts;
 use std::collections::HashMap;
+use libpep::core::data::{Encrypted, EncryptedPseudonym};
+use libpep::core::keys::{AttributeGlobalPublicKey, GlobalPublicKeys, PseudonymGlobalPublicKey, PublicKey};
+use libpep::core::transcryption::{EncryptionContext, PseudonymizationDomain};
+use libpep::distributed::server::setup::{BlindedAttributeGlobalSecretKey, BlindedGlobalKeys, BlindedPseudonymGlobalSecretKey};
 
 #[tokio::test]
 async fn test_create_pep_client() {
@@ -20,11 +16,11 @@ async fn test_create_pep_client() {
 
     let config = PAASConfig {
         blinded_global_keys: BlindedGlobalKeys {
-            pseudonym: BlindedPseudonymGlobalSecretKey::decode_from_hex(
+            pseudonym: BlindedPseudonymGlobalSecretKey::from_hex(
                 "dbf0d6e82ea1147350c1c613ba4ef160e35f3572c681b62f6f01e4606a5f0b06",
             )
             .unwrap(),
-            attribute: BlindedAttributeGlobalSecretKey::decode_from_hex(
+            attribute: BlindedAttributeGlobalSecretKey::from_hex(
                 "00f1c8be6e2f12c052d2d4ca5fb0fe216a304fb7b218a064f0560ff39359b809",
             )
             .unwrap(),
@@ -106,11 +102,11 @@ async fn test_pseudonymize() {
 
     let config = PAASConfig {
         blinded_global_keys: BlindedGlobalKeys {
-            pseudonym: BlindedPseudonymGlobalSecretKey::decode_from_hex(
+            pseudonym: BlindedPseudonymGlobalSecretKey::from_hex(
                 "dbf0d6e82ea1147350c1c613ba4ef160e35f3572c681b62f6f01e4606a5f0b06",
             )
             .unwrap(),
-            attribute: BlindedAttributeGlobalSecretKey::decode_from_hex(
+            attribute: BlindedAttributeGlobalSecretKey::from_hex(
                 "00f1c8be6e2f12c052d2d4ca5fb0fe216a304fb7b218a064f0560ff39359b809",
             )
             .unwrap(),

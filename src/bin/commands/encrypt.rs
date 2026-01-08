@@ -1,7 +1,7 @@
 use clap::{Arg, Command};
-use libpep::high_level::data_types::{Encryptable, Encrypted, Pseudonym};
+use libpep::core::data::{Encryptable, Pseudonym};
+use rand::rng;
 use paas_client::pseudonym_service::PseudonymService;
-use rand_core::OsRng;
 
 pub fn command() -> Command {
     Command::new("encrypt").about("Encrypt a pseudonym").arg(
@@ -17,12 +17,12 @@ pub async fn execute(matches: &clap::ArgMatches, service: &mut PseudonymService)
         .get_one::<String>("pseudonym")
         .expect("pseudonym is required");
     let pseudonym =
-        Pseudonym::decode_from_hex(pseudonym_string).expect("Failed to decode pseudonym");
+        Pseudonym::from_hex(pseudonym_string).expect("Failed to decode pseudonym");
 
-    let rng = &mut OsRng;
+    let mut rng = rng();
 
-    let (encrypted, sessions) = service.encrypt(&pseudonym, rng).expect("Failed to encrypt");
+    let (encrypted, sessions) = service.encrypt(&pseudonym, &mut rng).expect("Failed to encrypt");
 
-    println!("Encrypted pseudonym: {}", encrypted.as_base64());
+    println!("Encrypted pseudonym: {}", encrypted.to_base64());
     println!("Sessions: {}", sessions.encode());
 }

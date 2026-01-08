@@ -1,8 +1,4 @@
 use crate::auth::{Auth, AuthError, RequestBuilderExt};
-use libpep::distributed::key_blinding::SessionKeyShares;
-use libpep::high_level::contexts::{EncryptionContext, PseudonymizationDomain};
-use libpep::high_level::data_types::{EncryptedAttribute, EncryptedPseudonym};
-use libpep::high_level::ops::EncryptedData;
 use paas_api::config::{PAASConfig, TranscryptorConfig};
 use paas_api::sessions::{EndSessionRequest, SessionResponse, StartSessionResponse};
 use paas_api::status::{StatusResponse, VersionInfo};
@@ -12,6 +8,10 @@ use paas_api::transcrypt::{
     TranscryptionRequest, TranscryptionResponse,
 };
 use std::sync::Arc;
+use libpep::core::data::{EncryptedAttribute, EncryptedPseudonym};
+use libpep::core::transcryption::{EncryptionContext, PseudonymizationDomain};
+use libpep::core::transcryption::batch::EncryptedData;
+use libpep::distributed::server::keys::SessionKeyShares;
 
 #[derive(Debug, thiserror::Error)]
 pub enum TranscryptorError {
