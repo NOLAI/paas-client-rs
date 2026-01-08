@@ -1,6 +1,6 @@
 [package]
 name = "paas-client"
-version = "0.12.0"
+version = "0.13.0"
 authors = [
     "Job Doesburg <job@jobdoesburg.nl>",
     "Julian van der Horst <julian.vanderhorst@ru.nl"
