@@ -1,6 +1,6 @@
 [package]
 name = "paas-client"
-version = "0.11.0"
+version = "0.12.0"
 authors = [
     "Job Doesburg <job@jobdoesburg.nl>",
     "Julian van der Horst <julian.vanderhorst@ru.nl"
@@ -26,18 +26,19 @@ default = ["build-binary"]
 build-binary = ["clap"]
 
 [dependencies]
-paas-api = "0.6.1"
-libpep = "0.7.4"
+paas-api = "0.7.0"
+libpep = "0.8.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-rand_core = { version = "^0.6", features = ["std"] }
-reqwest = { version = "0.12.15", features = ["json"] }
-clap = { version = "4.5.35", optional = true }
+rand_core = { version = "0.10.0-rc-3"}
+reqwest = { version = "0.13.1", features = ["json"] }
+clap = { version = "4.5.54", optional = true }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 base64 = "0.22.1"
 async-trait = "0.1.88"
 thiserror = "2.0.12"
 futures = "0.3.31"
+rand = "0.10.0-rc.6"
 
 [dev-dependencies]
 chrono = "0.4.40"
