@@ -1,6 +1,6 @@
 use clap::{Arg, Command};
-use libpep::core::data::{Encrypted, EncryptedPseudonym};
-use libpep::core::transcryption::PseudonymizationDomain;
+use libpep::data::simple::{ElGamalEncrypted, EncryptedPseudonym};
+use libpep::factors::PseudonymizationDomain;
 use paas_client::pseudonym_service::PseudonymService;
 use paas_client::sessions::EncryptionContexts;
 

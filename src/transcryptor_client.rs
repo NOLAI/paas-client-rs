@@ -1,7 +1,5 @@
 use crate::auth::{Auth, AuthError, RequestBuilderExt};
-use crate::variants::{EncryptedAttributeVariant, EncryptedDataVariant, EncryptedPseudonymVariant};
-use libpep::core::transcryption::{EncryptionContext, PseudonymizationDomain};
-use libpep::distributed::server::keys::SessionKeyShares;
+use crate::variants::{EncryptedAttributeVariant, EncryptedRecordVariant, EncryptedPseudonymVariant};
 use paas_api::config::{PAASConfig, TranscryptorConfig};
 use paas_api::sessions::{EndSessionRequest, SessionResponse, StartSessionResponse};
 use paas_api::status::{StatusResponse, VersionInfo};
@@ -17,6 +15,8 @@ use paas_api::transcrypt::{
     TranscryptionResponse,
 };
 use std::sync::Arc;
+use libpep::factors::{EncryptionContext, PseudonymizationDomain};
+use libpep::keys::distribution::SessionKeyShares;
 
 #[derive(Debug, thiserror::Error)]
 pub enum TranscryptorError {
@@ -82,11 +82,11 @@ impl TranscryptorClient {
         config: TranscryptorConfig,
         auth: Arc<dyn Auth>,
     ) -> Result<TranscryptorClient, TranscryptorError> {
-        if config.url.scheme() != "https" {
-            return Err(TranscryptorError::NonHttpsUrlError {
-                scheme: config.url.scheme().to_string(),
-            });
-        }
+        // if config.url.scheme() != "https" {
+        //     return Err(TranscryptorError::NonHttpsUrlError {
+        //         scheme: config.url.scheme().to_string(),
+        //     });
+        // }
 
         let mut client = Self {
             config,
@@ -120,11 +120,11 @@ impl TranscryptorClient {
         session_id: EncryptionContext,
         sks: SessionKeyShares,
     ) -> Result<TranscryptorClient, TranscryptorError> {
-        if config.url.scheme() != "https" {
-            return Err(TranscryptorError::NonHttpsUrlError {
-                scheme: config.url.scheme().to_string(),
-            });
-        }
+        // if config.url.scheme() != "https" {
+        //     return Err(TranscryptorError::NonHttpsUrlError {
+        //         scheme: config.url.scheme().to_string(),
+        //     });
+        // }
 
         let mut client = Self {
             config,
@@ -308,7 +308,7 @@ impl TranscryptorClient {
         match encrypted_pseudonym {
             EncryptedPseudonymVariant::Normal(ep) => {
                 let request = PseudonymizationRequest {
-                    encrypted_pseudonym: *ep,
+                    encrypted_pseudonym: **ep,
                     domain_from: domain_from.clone(),
                     domain_to: domain_to.clone(),
                     session_from: session_from.clone(),
@@ -324,9 +324,9 @@ impl TranscryptorClient {
                 let pseudo_response = self
                     .process_response::<PseudonymizationResponse>(response)
                     .await?;
-                Ok(EncryptedPseudonymVariant::Normal(
+                Ok(EncryptedPseudonymVariant::Normal(Box::new(
                     pseudo_response.encrypted_pseudonym,
-                ))
+                )))
             }
             EncryptedPseudonymVariant::Long(lep) => {
                 let request = LongPseudonymizationRequest {
@@ -368,17 +368,17 @@ impl TranscryptorClient {
 
         match &encrypted_pseudonyms[0] {
             EncryptedPseudonymVariant::Normal(_) => {
-                let Normal_pseudonyms: Vec<_> = encrypted_pseudonyms
+                let normal_pseudonyms: Vec<_> = encrypted_pseudonyms
                     .iter()
                     .map(|v| match v {
-                        EncryptedPseudonymVariant::Normal(ep) => *ep,
+                        EncryptedPseudonymVariant::Normal(ep) => **ep,
                         EncryptedPseudonymVariant::Long(_) => {
                             panic!("Mixed variant types in batch")
                         }
                     })
                     .collect();
                 let request = PseudonymizationBatchRequest {
-                    encrypted_pseudonyms: Normal_pseudonyms,
+                    encrypted_pseudonyms: normal_pseudonyms,
                     domain_from: domain_from.clone(),
                     domain_to: domain_to.clone(),
                     session_from: session_from.clone(),
@@ -397,7 +397,7 @@ impl TranscryptorClient {
                 Ok(pseudo_response
                     .encrypted_pseudonyms
                     .into_iter()
-                    .map(EncryptedPseudonymVariant::Normal)
+                    .map(|ep| EncryptedPseudonymVariant::Normal(Box::new(ep)))
                     .collect())
             }
             EncryptedPseudonymVariant::Long(_) => {
@@ -446,7 +446,7 @@ impl TranscryptorClient {
         match encrypted_attribute {
             EncryptedAttributeVariant::Normal(ea) => {
                 let request = RekeyRequest {
-                    encrypted_attribute: *ea,
+                    encrypted_attribute: **ea,
                     session_from: session_from.clone(),
                     session_to: session_to.clone(),
                 };
@@ -458,9 +458,9 @@ impl TranscryptorClient {
                     .send()
                     .await?;
                 let rekey_response = self.process_response::<RekeyResponse>(response).await?;
-                Ok(EncryptedAttributeVariant::Normal(
+                Ok(EncryptedAttributeVariant::Normal(Box::new(
                     rekey_response.encrypted_attribute,
-                ))
+                )))
             }
             EncryptedAttributeVariant::Long(lea) => {
                 let request = LongRekeyRequest {
@@ -496,17 +496,17 @@ impl TranscryptorClient {
 
         match &encrypted_attributes[0] {
             EncryptedAttributeVariant::Normal(_) => {
-                let Normal_attributes: Vec<_> = encrypted_attributes
+                let normal_attributes: Vec<_> = encrypted_attributes
                     .iter()
                     .map(|v| match v {
-                        EncryptedAttributeVariant::Normal(ea) => *ea,
+                        EncryptedAttributeVariant::Normal(ea) => **ea,
                         EncryptedAttributeVariant::Long(_) => {
                             panic!("Mixed variant types in batch")
                         }
                     })
                     .collect();
                 let request = RekeyBatchRequest {
-                    encrypted_attributes: Normal_attributes,
+                    encrypted_attributes: normal_attributes,
                     session_from: session_from.clone(),
                     session_to: session_to.clone(),
                 };
@@ -523,7 +523,7 @@ impl TranscryptorClient {
                 Ok(rekey_response
                     .encrypted_attributes
                     .into_iter()
-                    .map(EncryptedAttributeVariant::Normal)
+                    .map(|ea| EncryptedAttributeVariant::Normal(Box::new(ea)))
                     .collect())
             }
             EncryptedAttributeVariant::Long(_) => {
@@ -563,14 +563,14 @@ impl TranscryptorClient {
     /// Ask the transcryptor to transcrypt data consisting of multiple pseudonyms and data points belonging to different entities.
     pub async fn transcrypt(
         &self,
-        encrypted: &EncryptedDataVariant,
+        encrypted: &EncryptedRecordVariant,
         domain_from: &PseudonymizationDomain,
         domain_to: &PseudonymizationDomain,
         session_from: &EncryptionContext,
         session_to: &EncryptionContext,
-    ) -> Result<EncryptedDataVariant, TranscryptorError> {
+    ) -> Result<EncryptedRecordVariant, TranscryptorError> {
         match encrypted {
-            EncryptedDataVariant::Normal(ed) => {
+            EncryptedRecordVariant::Normal(ed) => {
                 let request = TranscryptionRequest {
                     encrypted: ed.clone(),
                     domain_from: domain_from.clone(),
@@ -586,12 +586,12 @@ impl TranscryptorClient {
                     .send()
                     .await?;
                 let transcrypt_response = self
-                    .process_response::<TranscryptionResponse>(response)
+                    .process_response::<TranscryptionResponse<T>>(response)
                     .await?;
-                Ok(EncryptedDataVariant::Normal(transcrypt_response.encrypted))
+                Ok(EncryptedRecordVariant::Normal(transcrypt_response.encrypted))
             }
-            EncryptedDataVariant::Long(led) => {
-                let request = LongTranscryptionRequest {
+            EncryptedRecordVariant::Long(led) => {
+                let request = TranscryptionRequest {
                     encrypted: led.clone(),
                     domain_from: domain_from.clone(),
                     domain_to: domain_to.clone(),
@@ -608,11 +608,11 @@ impl TranscryptorClient {
                 let transcrypt_response = self
                     .process_response::<LongTranscryptionResponse>(response)
                     .await?;
-                Ok(EncryptedDataVariant::Long(transcrypt_response.encrypted))
+                Ok(EncryptedRecordVariant::Long(transcrypt_response.encrypted))
             }
-            EncryptedDataVariant::Json(ejson) => {
+            EncryptedRecordVariant::Json(ejson) => {
                 let request = JsonTranscryptionRequest {
-                    encrypted: ejson.clone(),
+                    encrypted: *ejson.clone(),
                     domain_from: domain_from.clone(),
                     domain_to: domain_to.clone(),
                     session_from: session_from.clone(),
@@ -628,7 +628,7 @@ impl TranscryptorClient {
                 let transcrypt_response = self
                     .process_response::<JsonTranscryptionResponse>(response)
                     .await?;
-                Ok(EncryptedDataVariant::Json(transcrypt_response.encrypted))
+                Ok(EncryptedRecordVariant::Json(Box::new(transcrypt_response.encrypted)))
             }
         }
     }
@@ -636,27 +636,27 @@ impl TranscryptorClient {
     /// Ask the transcryptor to transcrypt a batch of encrypted data items.
     pub async fn transcrypt_batch(
         &self,
-        encrypted: &[EncryptedDataVariant],
+        encrypted: &[EncryptedRecordVariant],
         domain_from: &PseudonymizationDomain,
         domain_to: &PseudonymizationDomain,
         session_from: &EncryptionContext,
         session_to: &EncryptionContext,
-    ) -> Result<Vec<EncryptedDataVariant>, TranscryptorError> {
+    ) -> Result<Vec<EncryptedRecordVariant>, TranscryptorError> {
         if encrypted.is_empty() {
             return Ok(vec![]);
         }
 
         match &encrypted[0] {
-            EncryptedDataVariant::Normal(_) => {
-                let Normal_data: Vec<_> = encrypted
+            EncryptedRecordVariant::Normal(_) => {
+                let normal_data: Vec<_> = encrypted
                     .iter()
                     .map(|v| match v {
-                        EncryptedDataVariant::Normal(ed) => ed.clone(),
+                        EncryptedRecordVariant::Normal(ed) => ed.clone(),
                         _ => panic!("Mixed variant types in batch"),
                     })
                     .collect();
                 let request = TranscryptionBatchRequest {
-                    encrypted: Normal_data,
+                    encrypted: normal_data,
                     domain_from: domain_from.clone(),
                     domain_to: domain_to.clone(),
                     session_from: session_from.clone(),
@@ -675,14 +675,14 @@ impl TranscryptorClient {
                 Ok(transcrypt_response
                     .encrypted
                     .into_iter()
-                    .map(EncryptedDataVariant::Normal)
+                    .map(EncryptedRecordVariant::Normal)
                     .collect())
             }
-            EncryptedDataVariant::Long(_) => {
+            EncryptedRecordVariant::Long(_) => {
                 let long_data: Vec<_> = encrypted
                     .iter()
                     .map(|v| match v {
-                        EncryptedDataVariant::Long(led) => led.clone(),
+                        EncryptedRecordVariant::Long(led) => led.clone(),
                         _ => panic!("Mixed variant types in batch"),
                     })
                     .collect();
@@ -706,14 +706,14 @@ impl TranscryptorClient {
                 Ok(transcrypt_response
                     .encrypted
                     .into_iter()
-                    .map(EncryptedDataVariant::Long)
+                    .map(EncryptedRecordVariant::Long)
                     .collect())
             }
-            EncryptedDataVariant::Json(_) => {
+            EncryptedRecordVariant::Json(_) => {
                 let json_data: Vec<_> = encrypted
                     .iter()
                     .map(|v| match v {
-                        EncryptedDataVariant::Json(ejson) => ejson.clone(),
+                        EncryptedRecordVariant::Json(ejson) => *ejson.clone(),
                         _ => panic!("Mixed variant types in batch"),
                     })
                     .collect();
@@ -737,7 +737,7 @@ impl TranscryptorClient {
                 Ok(transcrypt_response
                     .encrypted
                     .into_iter()
-                    .map(EncryptedDataVariant::Json)
+                    .map(|v| EncryptedRecordVariant::Json(Box::new(v)))
                     .collect())
             }
         }

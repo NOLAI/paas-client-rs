@@ -1,8 +1,7 @@
-use libpep::core::data::{EncryptedAttribute, EncryptedPseudonym};
-use libpep::core::json::data::EncryptedPEPJSONValue;
-use libpep::core::long::batch::LongEncryptedData;
-use libpep::core::long::data::{LongEncryptedAttribute, LongEncryptedPseudonym};
-use libpep::core::transcryption::batch::EncryptedData;
+use libpep::data::json::EncryptedPEPJSONValue;
+use libpep::data::long::{LongEncryptedAttribute, LongEncryptedPseudonym};
+use libpep::data::records::{EncryptedRecord, LongEncryptedRecord};
+use libpep::data::simple::{EncryptedAttribute, EncryptedPseudonym};
 use serde::{Deserialize, Serialize};
 
 /// Error when converting variant back to a specific type
@@ -12,9 +11,9 @@ pub enum VariantConversionError {
     ExpectedNormal,
     #[error("Expected Long variant, got Normal")]
     ExpectedLong,
-    #[error("Expected EncryptedData variant")]
+    #[error("Expected EncryptedRecord variant")]
     ExpectedData,
-    #[error("Expected LongEncryptedData variant")]
+    #[error("Expected LongEncryptedRecord variant")]
     ExpectedLongData,
     #[error("Expected EncryptedPEPJSONValue variant")]
     ExpectedJson,
@@ -24,13 +23,13 @@ pub enum VariantConversionError {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum EncryptedPseudonymVariant {
-    Normal(EncryptedPseudonym),
+    Normal(Box<EncryptedPseudonym>),
     Long(LongEncryptedPseudonym),
 }
 
 impl From<EncryptedPseudonym> for EncryptedPseudonymVariant {
     fn from(ep: EncryptedPseudonym) -> Self {
-        EncryptedPseudonymVariant::Normal(ep)
+        EncryptedPseudonymVariant::Normal(Box::new(ep))
     }
 }
 
@@ -44,7 +43,7 @@ impl TryFrom<EncryptedPseudonymVariant> for EncryptedPseudonym {
     type Error = VariantConversionError;
     fn try_from(variant: EncryptedPseudonymVariant) -> Result<Self, Self::Error> {
         match variant {
-            EncryptedPseudonymVariant::Normal(ep) => Ok(ep),
+            EncryptedPseudonymVariant::Normal(ep) => Ok(*ep),
             EncryptedPseudonymVariant::Long(_) => Err(VariantConversionError::ExpectedNormal),
         }
     }
@@ -64,13 +63,13 @@ impl TryFrom<EncryptedPseudonymVariant> for LongEncryptedPseudonym {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum EncryptedAttributeVariant {
-    Normal(EncryptedAttribute),
+    Normal(Box<EncryptedAttribute>),
     Long(LongEncryptedAttribute),
 }
 
 impl From<EncryptedAttribute> for EncryptedAttributeVariant {
     fn from(ea: EncryptedAttribute) -> Self {
-        EncryptedAttributeVariant::Normal(ea)
+        EncryptedAttributeVariant::Normal(Box::new(ea))
     }
 }
 
@@ -84,7 +83,7 @@ impl TryFrom<EncryptedAttributeVariant> for EncryptedAttribute {
     type Error = VariantConversionError;
     fn try_from(variant: EncryptedAttributeVariant) -> Result<Self, Self::Error> {
         match variant {
-            EncryptedAttributeVariant::Normal(ea) => Ok(ea),
+            EncryptedAttributeVariant::Normal(ea) => Ok(*ea),
             EncryptedAttributeVariant::Long(_) => Err(VariantConversionError::ExpectedNormal),
         }
     }
@@ -103,55 +102,55 @@ impl TryFrom<EncryptedAttributeVariant> for LongEncryptedAttribute {
 /// Variant enum for polymorphic data handling
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum EncryptedDataVariant {
-    Normal(EncryptedData),
-    Long(LongEncryptedData),
-    Json(EncryptedPEPJSONValue),
+pub enum EncryptedRecordVariant {
+    Normal(EncryptedRecord),
+    Long(LongEncryptedRecord),
+    Json(Box<EncryptedPEPJSONValue>),
 }
 
-impl From<EncryptedData> for EncryptedDataVariant {
-    fn from(ed: EncryptedData) -> Self {
-        EncryptedDataVariant::Normal(ed)
+impl From<EncryptedRecord> for EncryptedRecordVariant {
+    fn from(ed: EncryptedRecord) -> Self {
+        EncryptedRecordVariant::Normal(ed)
     }
 }
 
-impl From<LongEncryptedData> for EncryptedDataVariant {
-    fn from(led: LongEncryptedData) -> Self {
-        EncryptedDataVariant::Long(led)
+impl From<LongEncryptedRecord> for EncryptedRecordVariant {
+    fn from(led: LongEncryptedRecord) -> Self {
+        EncryptedRecordVariant::Long(led)
     }
 }
 
-impl From<EncryptedPEPJSONValue> for EncryptedDataVariant {
+impl From<EncryptedPEPJSONValue> for EncryptedRecordVariant {
     fn from(ejson: EncryptedPEPJSONValue) -> Self {
-        EncryptedDataVariant::Json(ejson)
+        EncryptedRecordVariant::Json(Box::new(ejson))
     }
 }
 
-impl TryFrom<EncryptedDataVariant> for EncryptedData {
+impl TryFrom<EncryptedRecordVariant> for EncryptedRecord {
     type Error = VariantConversionError;
-    fn try_from(variant: EncryptedDataVariant) -> Result<Self, Self::Error> {
+    fn try_from(variant: EncryptedRecordVariant) -> Result<Self, Self::Error> {
         match variant {
-            EncryptedDataVariant::Normal(ed) => Ok(ed),
+            EncryptedRecordVariant::Normal(ed) => Ok(ed),
             _ => Err(VariantConversionError::ExpectedData),
         }
     }
 }
 
-impl TryFrom<EncryptedDataVariant> for LongEncryptedData {
+impl TryFrom<EncryptedRecordVariant> for LongEncryptedRecord {
     type Error = VariantConversionError;
-    fn try_from(variant: EncryptedDataVariant) -> Result<Self, Self::Error> {
+    fn try_from(variant: EncryptedRecordVariant) -> Result<Self, Self::Error> {
         match variant {
-            EncryptedDataVariant::Long(led) => Ok(led),
+            EncryptedRecordVariant::Long(led) => Ok(led),
             _ => Err(VariantConversionError::ExpectedLongData),
         }
     }
 }
 
-impl TryFrom<EncryptedDataVariant> for EncryptedPEPJSONValue {
+impl TryFrom<EncryptedRecordVariant> for EncryptedPEPJSONValue {
     type Error = VariantConversionError;
-    fn try_from(variant: EncryptedDataVariant) -> Result<Self, Self::Error> {
+    fn try_from(variant: EncryptedRecordVariant) -> Result<Self, Self::Error> {
         match variant {
-            EncryptedDataVariant::Json(ejson) => Ok(ejson),
+            EncryptedRecordVariant::Json(ejson) => Ok(*ejson),
             _ => Err(VariantConversionError::ExpectedJson),
         }
     }

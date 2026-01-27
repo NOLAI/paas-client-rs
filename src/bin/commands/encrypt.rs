@@ -1,5 +1,5 @@
 use clap::{Arg, Command};
-use libpep::core::data::{Encryptable, Pseudonym};
+use libpep::data::simple::{ElGamalEncryptable, Pseudonym};
 use paas_client::pseudonym_service::PseudonymService;
 use rand::rng;
 
