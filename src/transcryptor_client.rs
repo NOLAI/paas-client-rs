@@ -1,5 +1,4 @@
 use crate::auth::{Auth, AuthError, RequestBuilderExt};
-use libpep::data::traits::{HasStructure, Pseudonymizable, Rekeyable, Transcryptable};
 use libpep::factors::{EncryptionContext, PseudonymizationDomain};
 use libpep::keys::distribution::SessionKeyShares;
 use paas_api::config::{PAASConfig, TranscryptorConfig};
@@ -15,6 +14,7 @@ use paas_api::transcrypt::{
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::sync::Arc;
+use libpep::data::traits::{HasStructure, Pseudonymizable, Rekeyable, Transcryptable};
 
 #[derive(Debug, thiserror::Error)]
 pub enum TranscryptorError {
@@ -80,11 +80,11 @@ impl TranscryptorClient {
         config: TranscryptorConfig,
         auth: Arc<dyn Auth>,
     ) -> Result<TranscryptorClient, TranscryptorError> {
-        // if config.url.scheme() != "https" {
-        //     return Err(TranscryptorError::NonHttpsUrlError {
-        //         scheme: config.url.scheme().to_string(),
-        //     });
-        // }
+        if config.url.scheme() != "https" {
+            return Err(TranscryptorError::NonHttpsUrlError {
+                scheme: config.url.scheme().to_string(),
+            });
+        }
 
         let mut client = Self {
             config,
@@ -118,11 +118,11 @@ impl TranscryptorClient {
         session_id: EncryptionContext,
         sks: SessionKeyShares,
     ) -> Result<TranscryptorClient, TranscryptorError> {
-        // if config.url.scheme() != "https" {
-        //     return Err(TranscryptorError::NonHttpsUrlError {
-        //         scheme: config.url.scheme().to_string(),
-        //     });
-        // }
+        if config.url.scheme() != "https" {
+            return Err(TranscryptorError::NonHttpsUrlError {
+                scheme: config.url.scheme().to_string(),
+            });
+        }
 
         let mut client = Self {
             config,
