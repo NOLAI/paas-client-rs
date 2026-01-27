@@ -1,4 +1,5 @@
 use crate::auth::{Auth, AuthError, RequestBuilderExt};
+use libpep::data::traits::{HasStructure, Pseudonymizable, Rekeyable, Transcryptable};
 use libpep::factors::{EncryptionContext, PseudonymizationDomain};
 use libpep::keys::distribution::SessionKeyShares;
 use paas_api::config::{PAASConfig, TranscryptorConfig};
@@ -14,7 +15,6 @@ use paas_api::transcrypt::{
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::sync::Arc;
-use libpep::data::traits::{HasStructure, Pseudonymizable, Rekeyable, Transcryptable};
 
 #[derive(Debug, thiserror::Error)]
 pub enum TranscryptorError {
