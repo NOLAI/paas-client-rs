@@ -1,7 +1,7 @@
 mod commands;
 
 use clap::{Arg, Command};
-use libpep::core::keys::SessionKeys;
+use libpep::keys::SessionKeys;
 use paas_api::config::PAASConfig;
 use paas_api::status::SystemId;
 use paas_client::auth::{BearerTokenAuth, SystemAuths};

@@ -1,16 +1,19 @@
 use crate::auth::{Auth, AuthError, RequestBuilderExt};
-use libpep::core::data::{EncryptedAttribute, EncryptedPseudonym};
-use libpep::core::transcryption::batch::EncryptedData;
-use libpep::core::transcryption::{EncryptionContext, PseudonymizationDomain};
-use libpep::distributed::server::keys::SessionKeyShares;
+use libpep::data::traits::{HasStructure, Pseudonymizable, Rekeyable, Transcryptable};
+use libpep::factors::{EncryptionContext, PseudonymizationDomain};
+use libpep::keys::distribution::SessionKeyShares;
 use paas_api::config::{PAASConfig, TranscryptorConfig};
+use paas_api::paths::ApiPath;
 use paas_api::sessions::{EndSessionRequest, SessionResponse, StartSessionResponse};
 use paas_api::status::{StatusResponse, VersionInfo};
 use paas_api::transcrypt::{
     PseudonymizationBatchRequest, PseudonymizationBatchResponse, PseudonymizationRequest,
     PseudonymizationResponse, RekeyBatchRequest, RekeyBatchResponse, RekeyRequest, RekeyResponse,
-    TranscryptionRequest, TranscryptionResponse,
+    TranscryptionBatchRequest, TranscryptionBatchResponse, TranscryptionRequest,
+    TranscryptionResponse,
 };
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::sync::Arc;
 
 #[derive(Debug, thiserror::Error)]
@@ -54,6 +57,8 @@ pub enum TranscryptorError {
     },
     #[error("URL must use HTTPS protocol, got: {scheme}")]
     NonHttpsUrlError { scheme: String },
+    #[error("Unexpected encrypted data variant type in response")]
+    UnexpectedVariantType,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -290,138 +295,197 @@ impl TranscryptorClient {
     }
 
     /// Ask the transcryptor pseudonymize an encrypted pseudonym.
-    pub async fn pseudonymize(
+    pub async fn pseudonymize<T>(
         &self,
-        encrypted_pseudonym: &EncryptedPseudonym,
+        encrypted: &T,
         domain_from: &PseudonymizationDomain,
         domain_to: &PseudonymizationDomain,
         session_from: &EncryptionContext,
         session_to: &EncryptionContext,
-    ) -> Result<EncryptedPseudonym, TranscryptorError> {
+    ) -> Result<T, TranscryptorError>
+    where
+        T: Pseudonymizable + DeserializeOwned + Serialize + Clone + ApiPath,
+    {
         let request = PseudonymizationRequest {
-            encrypted_pseudonym: *encrypted_pseudonym,
+            encrypted: encrypted.clone(),
             domain_from: domain_from.clone(),
             domain_to: domain_to.clone(),
             session_from: session_from.clone(),
             session_to: session_to.clone(),
         };
         let response = reqwest::Client::new()
-            .post(self.make_url(paas_api::paths::PSEUDONYMIZE))
+            .post(self.make_url(paas_api::paths::pseudonymize_path::<T>().as_str()))
             .with_auth(&self.auth)
             .await?
             .json(&request)
             .send()
             .await?;
         let pseudo_response = self
-            .process_response::<PseudonymizationResponse>(response)
+            .process_response::<PseudonymizationResponse<T>>(response)
             .await?;
-        Ok(pseudo_response.encrypted_pseudonym)
+        Ok(pseudo_response.result)
     }
 
     /// Ask the transcryptor to pseudonymize a batch of encrypted pseudonyms.
-    pub async fn pseudonymize_batch(
+    pub async fn pseudonymize_batch<T>(
         &self,
-        encrypted_pseudonyms: &[EncryptedPseudonym],
+        encrypted: Vec<T>,
         domain_from: &PseudonymizationDomain,
         domain_to: &PseudonymizationDomain,
         session_from: &EncryptionContext,
         session_to: &EncryptionContext,
-    ) -> Result<Vec<EncryptedPseudonym>, TranscryptorError> {
+    ) -> Result<Vec<T>, TranscryptorError>
+    where
+        T: Pseudonymizable + DeserializeOwned + Serialize + Clone + ApiPath + HasStructure,
+    {
+        if encrypted.is_empty() {
+            return Ok(vec![]);
+        }
+
         let request = PseudonymizationBatchRequest {
-            encrypted_pseudonyms: encrypted_pseudonyms.to_vec(),
+            encrypted,
             domain_from: domain_from.clone(),
             domain_to: domain_to.clone(),
             session_from: session_from.clone(),
             session_to: session_to.clone(),
         };
         let response = reqwest::Client::new()
-            .post(self.make_url(paas_api::paths::PSEUDONYMIZE_BATCH))
+            .post(self.make_url(paas_api::paths::pseudonymize_batch_path::<T>().as_str()))
             .with_auth(&self.auth)
             .await?
             .json(&request)
             .send()
             .await?;
         let pseudo_response = self
-            .process_response::<PseudonymizationBatchResponse>(response)
+            .process_response::<PseudonymizationBatchResponse<T>>(response)
             .await?;
-        Ok(pseudo_response.encrypted_pseudonyms)
+        Ok(pseudo_response.result)
     }
 
     /// Ask the transcryptor rekey an encrypted data point.
-    pub async fn rekey(
+    pub async fn rekey<T>(
         &self,
-        encrypted_attribute: &EncryptedAttribute,
+        encrypted: &T,
         session_from: &EncryptionContext,
         session_to: &EncryptionContext,
-    ) -> Result<EncryptedAttribute, TranscryptorError> {
+    ) -> Result<T, TranscryptorError>
+    where
+        T: Rekeyable + DeserializeOwned + Serialize + Clone + ApiPath,
+    {
         let request = RekeyRequest {
-            encrypted_attribute: *encrypted_attribute,
+            encrypted: encrypted.clone(),
             session_from: session_from.clone(),
             session_to: session_to.clone(),
         };
         let response = reqwest::Client::new()
-            .post(self.make_url(paas_api::paths::REKEY))
+            .post(self.make_url(paas_api::paths::rekey_path::<T>().as_str()))
             .with_auth(&self.auth)
             .await?
             .json(&request)
             .send()
             .await?;
-        let rekey_response = self.process_response::<RekeyResponse>(response).await?;
-        Ok(rekey_response.encrypted_attribute)
+        let rekey_response = self.process_response::<RekeyResponse<T>>(response).await?;
+        Ok(rekey_response.result)
     }
 
     /// Ask the transcryptor to rekey a batch of encrypted data points.
-    pub async fn rekey_batch(
+    pub async fn rekey_batch<T>(
         &self,
-        encrypt_attributes: &[EncryptedAttribute],
+        encrypted: Vec<T>,
         session_from: &EncryptionContext,
         session_to: &EncryptionContext,
-    ) -> Result<Vec<EncryptedAttribute>, TranscryptorError> {
+    ) -> Result<Vec<T>, TranscryptorError>
+    where
+        T: Rekeyable + DeserializeOwned + Serialize + Clone + ApiPath + HasStructure,
+    {
+        if encrypted.is_empty() {
+            return Ok(vec![]);
+        }
+
         let request = RekeyBatchRequest {
-            encrypted_attributes: encrypt_attributes.to_vec(),
+            encrypted,
             session_from: session_from.clone(),
             session_to: session_to.clone(),
         };
         let response = reqwest::Client::new()
-            .post(self.make_url(paas_api::paths::REKEY_BATCH))
+            .post(self.make_url(paas_api::paths::rekey_batch_path::<T>().as_str()))
             .with_auth(&self.auth)
             .await?
             .json(&request)
             .send()
             .await?;
         let rekey_response = self
-            .process_response::<RekeyBatchResponse>(response)
+            .process_response::<RekeyBatchResponse<T>>(response)
             .await?;
-        Ok(rekey_response.encrypted_attributes)
+        Ok(rekey_response.result)
     }
 
     /// Ask the transcryptor to transcrypt data consisting of multiple pseudonyms and data points belonging to different entities.
-    pub async fn transcrypt(
+    pub async fn transcrypt<T>(
         &self,
-        encrypted: &[EncryptedData],
+        encrypted: &T,
         domain_from: &PseudonymizationDomain,
         domain_to: &PseudonymizationDomain,
         session_from: &EncryptionContext,
         session_to: &EncryptionContext,
-    ) -> Result<Vec<EncryptedData>, TranscryptorError> {
+    ) -> Result<T, TranscryptorError>
+    where
+        T: Transcryptable + DeserializeOwned + Serialize + Clone + ApiPath,
+    {
         let request = TranscryptionRequest {
-            encrypted: encrypted.to_vec(),
+            encrypted: encrypted.clone(),
             domain_from: domain_from.clone(),
             domain_to: domain_to.clone(),
             session_from: session_from.clone(),
             session_to: session_to.clone(),
         };
         let response = reqwest::Client::new()
-            .post(self.make_url(paas_api::paths::TRANSCRYPT))
+            .post(self.make_url(paas_api::paths::transcrypt_path::<T>().as_str()))
             .with_auth(&self.auth)
             .await?
             .json(&request)
             .send()
             .await?;
         let transcrypt_response = self
-            .process_response::<TranscryptionResponse>(response)
+            .process_response::<TranscryptionResponse<T>>(response)
             .await?;
-        Ok(transcrypt_response.encrypted)
+        Ok(transcrypt_response.result)
+    }
+
+    /// Ask the transcryptor to transcrypt a batch of encrypted data items.
+    pub async fn transcrypt_batch<T>(
+        &self,
+        encrypted: Vec<T>,
+        domain_from: &PseudonymizationDomain,
+        domain_to: &PseudonymizationDomain,
+        session_from: &EncryptionContext,
+        session_to: &EncryptionContext,
+    ) -> Result<Vec<T>, TranscryptorError>
+    where
+        T: Transcryptable + DeserializeOwned + Serialize + Clone + ApiPath + HasStructure,
+    {
+        if encrypted.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let request = TranscryptionBatchRequest {
+            encrypted,
+            domain_from: domain_from.clone(),
+            domain_to: domain_to.clone(),
+            session_from: session_from.clone(),
+            session_to: session_to.clone(),
+        };
+        let response = reqwest::Client::new()
+            .post(self.make_url(paas_api::paths::transcrypt_batch_path::<T>().as_str()))
+            .with_auth(&self.auth)
+            .await?
+            .json(&request)
+            .send()
+            .await?;
+        let transcrypt_response = self
+            .process_response::<TranscryptionBatchResponse<T>>(response)
+            .await?;
+        Ok(transcrypt_response.result)
     }
 }
 

@@ -1,23 +1,28 @@
 use crate::auth::SystemAuths;
 use crate::sessions::EncryptionContexts;
 use crate::transcryptor_client::{TranscryptorClient, TranscryptorError};
-use libpep::core::data::{
-    Encryptable, Encrypted, EncryptedAttribute, EncryptedPseudonym, HasSessionKeys,
+use libpep::client::{Client, Distributed};
+use libpep::data::traits::{
+    Encryptable, Encrypted, HasStructure, Pseudonymizable, Rekeyable, Transcryptable,
 };
-use libpep::core::keys::SessionKeys;
-use libpep::core::transcryption::PseudonymizationDomain;
-use libpep::core::transcryption::batch::EncryptedData;
-use libpep::distributed::client::client::PEPClient;
-use libpep::distributed::server::keys::SessionKeyShares;
+use libpep::factors::PseudonymizationDomain;
+use libpep::keys::distribution::SessionKeyShares;
+use libpep::keys::{KeyProvider, SessionKeys};
+use libpep::transcryptor::BatchError;
 use paas_api::config::PAASConfig;
+use paas_api::paths::ApiPath;
 use paas_api::status::SystemId;
 use rand_core::{CryptoRng, RngCore};
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PseudonymServiceError {
     #[error(transparent)]
     TranscryptorError(#[from] TranscryptorError),
+    #[error(transparent)]
+    BatchError(#[from] BatchError),
     #[error("No auth found for system {0}")]
     MissingAuth(SystemId),
     #[error("No session found for system {0}")]
@@ -25,7 +30,7 @@ pub enum PseudonymServiceError {
     #[error("No session key share found for system {0}")]
     MissingSessionKeyShares(SystemId),
     #[error("PEP crypto client not initialized")]
-    UninitializedPEPClient,
+    UninitializedClient,
     #[error("Transcryptor does not have session")]
     UninitializedTranscryptor,
     #[error("Inconsistent config received from {system}")]
@@ -36,13 +41,13 @@ pub enum PseudonymServiceError {
 pub struct PseudonymService {
     pub(crate) config: PAASConfig,
     pub(crate) transcryptors: Vec<TranscryptorClient>,
-    pep_crypto_client: Option<PEPClient>,
+    pep_crypto_client: Option<Client>,
 }
 
 pub type SessionKeySharess = HashMap<SystemId, SessionKeyShares>;
 
 /// Convert encrypted pseudonyms into your own pseudonyms, using the [PseudonymService].
-/// The service will communicate with the configured transcryptors, and wraps around a [PEPClient] for cryptographic operations.
+/// The service will communicate with the configured transcryptors, and wraps around a [Client] for cryptographic operations.
 impl PseudonymService {
     /// Create a new PseudonymService with the given configuration.
     pub async fn new(
@@ -165,7 +170,7 @@ impl PseudonymService {
         Ok(Self {
             config,
             transcryptors,
-            pep_crypto_client: Some(PEPClient::restore(session_keys)),
+            pep_crypto_client: Some(Client::restore(session_keys)),
         })
     }
 
@@ -177,7 +182,7 @@ impl PseudonymService {
         let session_keys = *self
             .pep_crypto_client
             .as_ref()
-            .ok_or(PseudonymServiceError::UninitializedPEPClient)?
+            .ok_or(PseudonymServiceError::UninitializedClient)?
             .dump();
 
         let mut session_key_shares = HashMap::new();
@@ -195,7 +200,7 @@ impl PseudonymService {
         self.pep_crypto_client.is_some()
     }
 
-    /// Start a new session with all configured transcryptors, and initialize a [PEPClient] using the session keys.
+    /// Start a new session with all configured transcryptors, and initialize a [Client] using the session keys.
     pub async fn init(&mut self) -> Result<(), PseudonymServiceError> {
         let mut sks = vec![];
         for transcryptor in &mut self.transcryptors {
@@ -206,7 +211,7 @@ impl PseudonymService {
             sks.push(key_share);
         }
 
-        self.pep_crypto_client = Some(PEPClient::new(self.config.blinded_global_keys, &sks));
+        self.pep_crypto_client = Some(Client::from_shares(self.config.blinded_global_keys, &sks));
 
         Ok(())
     }
@@ -248,19 +253,24 @@ impl PseudonymService {
         Ok(())
     }
 
+    // TODO add a way to change the order of transcryptors, and add a way to add new transcryptors
+
     /// Transform an encrypted pseudonym into your own pseudonym.
-    pub async fn pseudonymize(
+    pub async fn pseudonymize<T>(
         &mut self,
-        encrypted_pseudonym: &EncryptedPseudonym,
+        encrypted_pseudonym: &T,
         sessions_from: &EncryptionContexts,
         domain_from: &PseudonymizationDomain,
         domain_to: &PseudonymizationDomain,
-    ) -> Result<EncryptedPseudonym, PseudonymServiceError> {
+    ) -> Result<T, PseudonymServiceError>
+    where
+        T: Pseudonymizable + DeserializeOwned + Serialize + Clone + ApiPath,
+    {
         if self.pep_crypto_client.is_none() {
             self.init().await?;
         }
 
-        let mut transcrypted = *encrypted_pseudonym;
+        let mut transcrypted = encrypted_pseudonym.clone();
 
         for i in 0..self.transcryptors.len() {
             let system_id = &self.transcryptors[i].config.system_id;
@@ -273,7 +283,7 @@ impl PseudonymService {
                 None => return Err(PseudonymServiceError::UninitializedTranscryptor),
             };
 
-            let transcryption_result = self.transcryptors[i]
+            let result = self.transcryptors[i]
                 .pseudonymize(
                     &transcrypted,
                     domain_from,
@@ -283,16 +293,15 @@ impl PseudonymService {
                 )
                 .await;
 
-            transcrypted = match transcryption_result {
+            transcrypted = match result {
                 Err(TranscryptorError::InvalidSession(_)) => {
                     self.refresh_session(i).await?;
 
-                    let transcryptor = &self.transcryptors[i];
                     let new_session_id = match &self.transcryptors[i].session_id {
                         Some(id) => id.clone(),
                         None => return Err(PseudonymServiceError::UninitializedTranscryptor),
                     };
-                    transcryptor
+                    self.transcryptors[i]
                         .pseudonymize(
                             &transcrypted,
                             domain_from,
@@ -310,23 +319,24 @@ impl PseudonymService {
         Ok(transcrypted)
     }
 
-    // TODO add a way to change the order of transcryptors, and add a way to add new transcryptors
-
     /// Transform a batch of encrypted pseudonyms into your own pseudonyms.
     /// Notice that the order of the pseudonyms in the input and output vectors are NOT the same, to prevent linking.
     /// If you need to preserve the order, you should call the [pseudonymize] method for each pseudonym individually. (TODO: add a feature flag to preserve order)
-    pub async fn pseudonymize_batch(
+    pub async fn pseudonymize_batch<T>(
         &mut self,
-        encrypted_pseudonyms: &[EncryptedPseudonym],
+        encrypted_pseudonyms: Vec<T>,
         sessions_from: &EncryptionContexts,
         domain_from: &PseudonymizationDomain,
         domain_to: &PseudonymizationDomain,
-    ) -> Result<Vec<EncryptedPseudonym>, PseudonymServiceError> {
+    ) -> Result<Vec<T>, PseudonymServiceError>
+    where
+        T: Pseudonymizable + DeserializeOwned + Serialize + Clone + ApiPath + HasStructure,
+    {
         if self.pep_crypto_client.is_none() {
             self.init().await?;
         }
 
-        let mut transcrypted = encrypted_pseudonyms.to_owned();
+        let mut transcrypted = encrypted_pseudonyms;
 
         for i in 0..self.transcryptors.len() {
             let system_id = &self.transcryptors[i].config.system_id;
@@ -339,31 +349,27 @@ impl PseudonymService {
                 None => return Err(PseudonymServiceError::UninitializedTranscryptor),
             };
 
-            let transcryption_result = {
-                let transcryptor = &self.transcryptors[i];
-                transcryptor
-                    .pseudonymize_batch(
-                        &transcrypted,
-                        domain_from,
-                        domain_to,
-                        session_from,
-                        &session_id,
-                    )
-                    .await
-            };
+            let result = self.transcryptors[i]
+                .pseudonymize_batch(
+                    transcrypted.clone(),
+                    domain_from,
+                    domain_to,
+                    session_from,
+                    &session_id,
+                )
+                .await;
 
-            transcrypted = match transcryption_result {
+            transcrypted = match result {
                 Err(TranscryptorError::InvalidSession(_)) => {
                     self.refresh_session(i).await?;
 
-                    let transcryptor = &self.transcryptors[i];
                     let new_session_id = match &self.transcryptors[i].session_id {
                         Some(id) => id.clone(),
                         None => return Err(PseudonymServiceError::UninitializedTranscryptor),
                     };
-                    transcryptor
+                    self.transcryptors[i]
                         .pseudonymize_batch(
-                            &transcrypted,
+                            transcrypted,
                             domain_from,
                             domain_to,
                             session_from,
@@ -378,17 +384,21 @@ impl PseudonymService {
 
         Ok(transcrypted)
     }
+
     /// Transform an encrypted data point encrypted in one session into a data point you can decrypt.
-    pub async fn rekey(
+    pub async fn rekey<T>(
         &mut self,
-        encrypted_data_point: &EncryptedAttribute,
+        encrypted_data_point: &T,
         sessions_from: &EncryptionContexts,
-    ) -> Result<EncryptedAttribute, PseudonymServiceError> {
+    ) -> Result<T, PseudonymServiceError>
+    where
+        T: Rekeyable + DeserializeOwned + Serialize + Clone + ApiPath,
+    {
         if self.pep_crypto_client.is_none() {
             self.init().await?;
         }
 
-        let mut transcrypted = *encrypted_data_point;
+        let mut transcrypted = encrypted_data_point.clone();
 
         for i in 0..self.transcryptors.len() {
             let system_id = &self.transcryptors[i].config.system_id;
@@ -401,23 +411,19 @@ impl PseudonymService {
                 None => return Err(PseudonymServiceError::UninitializedTranscryptor),
             };
 
-            let rekey_result = {
-                let transcryptor = &self.transcryptors[i];
-                transcryptor
-                    .rekey(&transcrypted, session_from, &session_id)
-                    .await
-            };
+            let result = self.transcryptors[i]
+                .rekey(&transcrypted, session_from, &session_id)
+                .await;
 
-            transcrypted = match rekey_result {
+            transcrypted = match result {
                 Err(TranscryptorError::InvalidSession(_)) => {
                     self.refresh_session(i).await?;
 
-                    let transcryptor = &self.transcryptors[i];
                     let new_session_id = match &self.transcryptors[i].session_id {
                         Some(id) => id.clone(),
                         None => return Err(PseudonymServiceError::UninitializedTranscryptor),
                     };
-                    transcryptor
+                    self.transcryptors[i]
                         .rekey(&transcrypted, session_from, &new_session_id)
                         .await?
                 }
@@ -428,19 +434,22 @@ impl PseudonymService {
 
         Ok(transcrypted)
     }
-    /// Transform a batch of encrypted data points encrypted in one session into into data points you can decrypt.
+    /// Transform a batch of encrypted data points encrypted in one session into data points you can decrypt.
     /// Notice that the order of the data points in the input and output vectors are NOT the same, to prevent linking.
-    /// If you need to preserve the order, you should call the [rekey] method for each data points individually. (TODO: add a feature flag to preserve order)
-    pub async fn rekey_batch(
+    /// If you need to preserve the order, you should call the [rekey] method for each data point individually. (TODO: add a feature flag to preserve order)
+    pub async fn rekey_batch<T>(
         &mut self,
-        encrypted_data_points: &[EncryptedAttribute],
+        encrypted_data_points: Vec<T>,
         sessions_from: &EncryptionContexts,
-    ) -> Result<Vec<EncryptedAttribute>, PseudonymServiceError> {
+    ) -> Result<Vec<T>, PseudonymServiceError>
+    where
+        T: Rekeyable + DeserializeOwned + Serialize + Clone + ApiPath + HasStructure,
+    {
         if self.pep_crypto_client.is_none() {
             self.init().await?;
         }
 
-        let mut transcrypted = encrypted_data_points.to_owned();
+        let mut transcrypted = encrypted_data_points;
 
         for i in 0..self.transcryptors.len() {
             let system_id = &self.transcryptors[i].config.system_id;
@@ -453,24 +462,20 @@ impl PseudonymService {
                 None => return Err(PseudonymServiceError::UninitializedTranscryptor),
             };
 
-            let rekey_result = {
-                let transcryptor = &self.transcryptors[i];
-                transcryptor
-                    .rekey_batch(&transcrypted, session_from, &session_id)
-                    .await
-            };
+            let result = self.transcryptors[i]
+                .rekey_batch(transcrypted.clone(), session_from, &session_id)
+                .await;
 
-            transcrypted = match rekey_result {
+            transcrypted = match result {
                 Err(TranscryptorError::InvalidSession(_)) => {
                     self.refresh_session(i).await?;
 
-                    let transcryptor = &self.transcryptors[i];
                     let new_session_id = match &self.transcryptors[i].session_id {
                         Some(id) => id.clone(),
                         None => return Err(PseudonymServiceError::UninitializedTranscryptor),
                     };
-                    transcryptor
-                        .rekey_batch(&transcrypted, session_from, &new_session_id)
+                    self.transcryptors[i]
+                        .rekey_batch(transcrypted, session_from, &new_session_id)
                         .await?
                 }
                 Err(err) => return Err(PseudonymServiceError::TranscryptorError(err)),
@@ -480,20 +485,22 @@ impl PseudonymService {
 
         Ok(transcrypted)
     }
-    /// Transform a batch of encrypted data for different entities into data you can decrypt
-    /// Notice that the order of the entities in the input and output vectors are NOT the same, to prevent linking.
-    pub async fn transcrypt(
+    /// Transform a single encrypted data item into data you can decrypt.
+    pub async fn transcrypt<T>(
         &mut self,
-        encrypted: &[EncryptedData],
+        encrypted: &T,
         sessions_from: &EncryptionContexts,
         domain_from: &PseudonymizationDomain,
         domain_to: &PseudonymizationDomain,
-    ) -> Result<Vec<EncryptedData>, PseudonymServiceError> {
+    ) -> Result<T, PseudonymServiceError>
+    where
+        T: Transcryptable + DeserializeOwned + Serialize + Clone + ApiPath,
+    {
         if self.pep_crypto_client.is_none() {
             self.init().await?;
         }
 
-        let mut transcrypted = encrypted.to_owned();
+        let mut transcrypted = encrypted.clone();
 
         for i in 0..self.transcryptors.len() {
             let system_id = &self.transcryptors[i].config.system_id;
@@ -506,29 +513,25 @@ impl PseudonymService {
                 None => return Err(PseudonymServiceError::UninitializedTranscryptor),
             };
 
-            let transcryption_result = {
-                let transcryptor = &self.transcryptors[i];
-                transcryptor
-                    .transcrypt(
-                        &transcrypted,
-                        domain_from,
-                        domain_to,
-                        session_from,
-                        &session_id,
-                    )
-                    .await
-            };
+            let result = self.transcryptors[i]
+                .transcrypt(
+                    &transcrypted,
+                    domain_from,
+                    domain_to,
+                    session_from,
+                    &session_id,
+                )
+                .await;
 
-            transcrypted = match transcryption_result {
+            transcrypted = match result {
                 Err(TranscryptorError::InvalidSession(_)) => {
                     self.refresh_session(i).await?;
 
-                    let transcryptor = &self.transcryptors[i];
                     let new_session_id = match &self.transcryptors[i].session_id {
                         Some(id) => id.clone(),
                         None => return Err(PseudonymServiceError::UninitializedTranscryptor),
                     };
-                    transcryptor
+                    self.transcryptors[i]
                         .transcrypt(
                             &transcrypted,
                             domain_from,
@@ -545,19 +548,107 @@ impl PseudonymService {
 
         Ok(transcrypted)
     }
-    /// Encrypt a message using the [PEPClient]'s current session.
-    pub fn encrypt<R: RngCore + CryptoRng, E: Encryptable + HasSessionKeys + 'static>(
+
+    /// Transform a batch of encrypted data for different entities into data you can decrypt.
+    /// Notice that the order of the entities in the input and output vectors are NOT the same, to prevent linking.
+    pub async fn transcrypt_batch<T>(
+        &mut self,
+        encrypted: Vec<T>,
+        sessions_from: &EncryptionContexts,
+        domain_from: &PseudonymizationDomain,
+        domain_to: &PseudonymizationDomain,
+    ) -> Result<Vec<T>, PseudonymServiceError>
+    where
+        T: Transcryptable + DeserializeOwned + Serialize + Clone + ApiPath + HasStructure,
+    {
+        if self.pep_crypto_client.is_none() {
+            self.init().await?;
+        }
+
+        let mut transcrypted = encrypted;
+
+        for i in 0..self.transcryptors.len() {
+            let system_id = &self.transcryptors[i].config.system_id;
+            let session_from = sessions_from
+                .get(system_id)
+                .ok_or_else(|| PseudonymServiceError::MissingSession(system_id.clone()))?;
+
+            let session_id = match &self.transcryptors[i].session_id {
+                Some(id) => id.clone(),
+                None => return Err(PseudonymServiceError::UninitializedTranscryptor),
+            };
+
+            let result = self.transcryptors[i]
+                .transcrypt_batch(
+                    transcrypted.clone(),
+                    domain_from,
+                    domain_to,
+                    session_from,
+                    &session_id,
+                )
+                .await;
+
+            transcrypted = match result {
+                Err(TranscryptorError::InvalidSession(_)) => {
+                    self.refresh_session(i).await?;
+
+                    let new_session_id = match &self.transcryptors[i].session_id {
+                        Some(id) => id.clone(),
+                        None => return Err(PseudonymServiceError::UninitializedTranscryptor),
+                    };
+                    self.transcryptors[i]
+                        .transcrypt_batch(
+                            transcrypted,
+                            domain_from,
+                            domain_to,
+                            session_from,
+                            &new_session_id,
+                        )
+                        .await?
+                }
+                Err(err) => return Err(PseudonymServiceError::TranscryptorError(err)),
+                Ok(value) => value,
+            };
+        }
+
+        Ok(transcrypted)
+    }
+    /// Encrypt a message using the [Client]'s current session.
+    pub fn encrypt<R: RngCore + CryptoRng, E: Encryptable + 'static>(
         &mut self,
         message: &E,
         rng: &mut R,
-    ) -> Result<(E::EncryptedType, EncryptionContexts), PseudonymServiceError> {
+    ) -> Result<(E::EncryptedType, EncryptionContexts), PseudonymServiceError>
+    where
+        SessionKeys: KeyProvider<E::PublicKeyType>,
+    {
         let pep_client = self
             .pep_crypto_client
             .as_ref()
-            .ok_or(PseudonymServiceError::UninitializedPEPClient)?;
+            .ok_or(PseudonymServiceError::UninitializedClient)?;
 
         Ok((
             pep_client.encrypt(message, rng),
+            self.get_current_sessions()?.clone(),
+        ))
+    }
+
+    /// Batch encrypt a vec of message using the [Client]'s current session.
+    pub fn encrypt_batch<R: RngCore + CryptoRng, E: Encryptable + 'static>(
+        &mut self,
+        message: &[E],
+        rng: &mut R,
+    ) -> Result<(Vec<E::EncryptedType>, EncryptionContexts), PseudonymServiceError>
+    where
+        SessionKeys: KeyProvider<E::PublicKeyType>,
+    {
+        let pep_client = self
+            .pep_crypto_client
+            .as_ref()
+            .ok_or(PseudonymServiceError::UninitializedClient)?;
+
+        Ok((
+            pep_client.encrypt_batch(message, rng)?,
             self.get_current_sessions()?.clone(),
         ))
     }
@@ -579,19 +670,35 @@ impl PseudonymService {
         Ok(EncryptionContexts(sessions))
     }
 
-    /// Decrypt an encrypted message using the [PEPClient]'s current session.
+    /// Decrypt an encrypted message using the [Client]'s current session.
     pub fn decrypt<E: Encrypted>(
         &mut self,
         encrypted: &E,
     ) -> Result<E::UnencryptedType, PseudonymServiceError>
     where
-        E::UnencryptedType: HasSessionKeys + 'static,
+        SessionKeys: KeyProvider<E::SecretKeyType>,
     {
         let pep_client = self
             .pep_crypto_client
             .as_ref()
-            .ok_or(PseudonymServiceError::UninitializedPEPClient)?;
+            .ok_or(PseudonymServiceError::UninitializedClient)?;
 
         Ok(pep_client.decrypt(encrypted))
+    }
+
+    /// Batch decrypt a vec of encrypted messages using the [Client]'s current session.
+    pub fn decrypt_batch<E: Encrypted>(
+        &mut self,
+        encrypted: &[E],
+    ) -> Result<Vec<E::UnencryptedType>, PseudonymServiceError>
+    where
+        SessionKeys: KeyProvider<E::SecretKeyType>,
+    {
+        let pep_client = self
+            .pep_crypto_client
+            .as_ref()
+            .ok_or(PseudonymServiceError::UninitializedClient)?;
+
+        Ok(pep_client.decrypt_batch(encrypted)?)
     }
 }
