@@ -1,14 +1,18 @@
 use chrono::Utc;
+use libpep::data::simple::{ElGamalEncrypted, EncryptedAttribute, EncryptedPseudonym};
+use libpep::factors::{EncryptionContext, PseudonymizationDomain};
+use libpep::keys::distribution::{
+    BlindedAttributeGlobalSecretKey, BlindedGlobalKeys, BlindedPseudonymGlobalSecretKey,
+};
+use libpep::keys::{
+    AttributeGlobalPublicKey, GlobalPublicKeys, PseudonymGlobalPublicKey, PublicKey,
+};
 use paas_api::config::{PAASConfig, TranscryptorConfig};
 use paas_api::status::{StatusResponse, VersionInfo};
 use paas_client::auth::{BearerTokenAuth, SystemAuths};
 use paas_client::pseudonym_service::PseudonymService;
 use paas_client::sessions::EncryptionContexts;
 use std::collections::HashMap;
-use libpep::data::simple::{ElGamalEncrypted, EncryptedAttribute, EncryptedPseudonym};
-use libpep::factors::{EncryptionContext, PseudonymizationDomain};
-use libpep::keys::distribution::{BlindedAttributeGlobalSecretKey, BlindedGlobalKeys, BlindedPseudonymGlobalSecretKey};
-use libpep::keys::{AttributeGlobalPublicKey, GlobalPublicKeys, PseudonymGlobalPublicKey, PublicKey};
 
 #[tokio::test]
 async fn test_create_pep_client() {
@@ -165,10 +169,10 @@ async fn test_pseudonymize() {
         .with_body(r#"{"session_id": "test_session", "session_key_shares": {"pseudonym": "5f5289d6909083257b9372c362a1905a0f0370181c5b75af812815513edcda0a", "attribute": "5f5289d6909083257b9372c362a1905a0f0370181c5b75af812815513edcda0a"}}"#)
         .create();
 
-    let _pseudonymize = server.mock("POST", "/pseudonymize")
+    let _pseudonymize = server.mock("POST", "/pseudonymize/pseudonym")
         .with_status(200)
         .with_header("Content-Type", "application/json")
-        .with_body(r#"{"encrypted_pseudonym": "gqmiHiFA8dMdNtbCgsJ-EEfT9fjTV91BrfcHKN57e2vaLR2_UJEVExd6o9tdZg7vKGQklYZwV3REOaOQedKtUA=="}"#)
+        .with_body(r#"{"result": "gqmiHiFA8dMdNtbCgsJ-EEfT9fjTV91BrfcHKN57e2vaLR2_UJEVExd6o9tdZg7vKGQklYZwV3REOaOQedKtUA=="}"#)
         .create();
 
     let auths = SystemAuths::from_auths(HashMap::from([
@@ -282,10 +286,10 @@ async fn test_rekey() {
         .create();
 
     let _rekey = server
-        .mock("POST", "/rekey")
+        .mock("POST", "/rekey/attribute")
         .with_status(200)
         .with_header("Content-Type", "application/json")
-        .with_body(r#"{"encrypted_attribute": "gqmiHiFA8dMdNtbCgsJ-EEfT9fjTV91BrfcHKN57e2vaLR2_UJEVExd6o9tdZg7vKGQklYZwV3REOaOQedKtUA=="}"#)
+        .with_body(r#"{"result": "gqmiHiFA8dMdNtbCgsJ-EEfT9fjTV91BrfcHKN57e2vaLR2_UJEVExd6o9tdZg7vKGQklYZwV3REOaOQedKtUA=="}"#)
         .create();
 
     let auths = SystemAuths::from_auths(HashMap::from([
