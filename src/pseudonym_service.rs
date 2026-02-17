@@ -3,7 +3,8 @@ use crate::sessions::EncryptionContexts;
 use crate::transcryptor_client::{TranscryptorClient, TranscryptorError};
 use libpep::client::{Client, Distributed};
 use libpep::data::traits::{
-    Encryptable, Encrypted, HasStructure, Pseudonymizable, Rekeyable, Transcryptable,
+    BatchEncryptable, Encryptable, Encrypted, HasStructure, Pseudonymizable, Rekeyable,
+    Transcryptable,
 };
 use libpep::factors::PseudonymizationDomain;
 use libpep::keys::distribution::SessionKeyShares;
@@ -12,7 +13,7 @@ use libpep::transcryptor::BatchError;
 use paas_api::config::PAASConfig;
 use paas_api::paths::ApiPath;
 use paas_api::status::SystemId;
-use rand_core::{CryptoRng, RngCore};
+use rand_core::{CryptoRng, Rng};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
@@ -614,7 +615,7 @@ impl PseudonymService {
         Ok(transcrypted)
     }
     /// Encrypt a message using the [Client]'s current session.
-    pub fn encrypt<R: RngCore + CryptoRng, E: Encryptable + 'static>(
+    pub fn encrypt<R: Rng + CryptoRng, E: Encryptable + 'static>(
         &mut self,
         message: &E,
         rng: &mut R,
@@ -634,7 +635,7 @@ impl PseudonymService {
     }
 
     /// Batch encrypt a vec of message using the [Client]'s current session.
-    pub fn encrypt_batch<R: RngCore + CryptoRng, E: Encryptable + 'static>(
+    pub fn encrypt_batch<R: Rng + CryptoRng, E: Encryptable + BatchEncryptable + 'static>(
         &mut self,
         message: &[E],
         rng: &mut R,
