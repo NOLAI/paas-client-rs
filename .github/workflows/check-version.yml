@@ -11,5 +11,5 @@ jobs:
 
     name: cargo semver-checks
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: obi1kenobi/cargo-semver-checks-action@v2
