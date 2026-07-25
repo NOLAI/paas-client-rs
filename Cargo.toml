@@ -34,7 +34,7 @@ rand_core = { version = "0.10.0-rc-5"}
 reqwest = { version = "0.13.1", features = ["json"] }
 clap = { version = "4.5.54", optional = true }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
-base64 = "0.22.1"
+base64 = "0.23.0"
 async-trait = "0.1.88"
 thiserror = "2.0.12"
 futures = "0.3.31"
