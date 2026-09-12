@@ -20,6 +20,6 @@ jobs:
     name: cargo test
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
       - run: cargo test --all-features
 
